@@ -1,13 +1,17 @@
 import io
+from typing import Literal
 
 import pdfplumber
 from fastapi import FastAPI, HTTPException, UploadFile
 from fastapi.responses import FileResponse
+from pydantic import BaseModel
 
+from app import db
 from app.ai_invoice_extractor import extract_invoice_with_ai
 from app.invoice_parser import parse_invoice_text
 
 app = FastAPI(title="BauOS Invoice MVP")
+db.init_db()
 
 
 @app.get("/")
@@ -60,4 +64,30 @@ async def parse_invoice(file: UploadFile):
     result = parse_invoice_text(text)
     if result.total_amount is None:
         result = extract_invoice_with_ai(text)
-    return _build_response(result)
+
+    response = _build_response(result)
+    invoice_id = db.save_invoice(response)
+    return {**response, "id": invoice_id, "status": "offen"}
+
+
+@app.get("/invoices")
+def get_invoices() -> list[dict]:
+    return db.list_invoices()
+
+
+class StatusUpdate(BaseModel):
+    status: Literal["offen", "bezahlt"]
+
+
+@app.patch("/invoices/{invoice_id}")
+def update_invoice_status(invoice_id: int, body: StatusUpdate) -> dict:
+    if not db.update_status(invoice_id, body.status):
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    return db.get_invoice(invoice_id)
+
+
+@app.delete("/invoices/{invoice_id}")
+def delete_invoice(invoice_id: int) -> dict:
+    if not db.delete_invoice(invoice_id):
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    return {"deleted": invoice_id}
