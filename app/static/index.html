@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BauOS – Rechnungserkennung</title>
+<style>
+  :root {
+    --beige: #f4ede1;
+    --card: #fffdf8;
+    --blue: #a9d3e0;
+    --blue-dark: #6fb0c2;
+    --text: #3a352e;
+    --text-muted: #8a8275;
+    --border: #e6dcc9;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--beige);
+    font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+    color: var(--text);
+    display: flex;
+    justify-content: center;
+    padding: 48px 16px;
+  }
+
+  main {
+    width: 100%;
+    max-width: 560px;
+  }
+
+  h1 {
+    font-size: 1.6rem;
+    font-weight: 600;
+    margin: 0 0 4px;
+  }
+
+  .subtitle {
+    color: var(--text-muted);
+    margin: 0 0 32px;
+    font-size: 0.95rem;
+  }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 28px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
+    margin-bottom: 20px;
+  }
+
+  .dropzone {
+    border: 2px dashed var(--blue-dark);
+    border-radius: 12px;
+    padding: 32px;
+    text-align: center;
+    cursor: pointer;
+    transition: background 0.15s ease;
+  }
+
+  .dropzone:hover, .dropzone.dragover {
+    background: #eef7f9;
+  }
+
+  .dropzone p {
+    margin: 8px 0 0;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+  }
+
+  input[type="file"] { display: none; }
+
+  button {
+    width: 100%;
+    margin-top: 16px;
+    padding: 12px;
+    border: none;
+    border-radius: 10px;
+    background: var(--blue-dark);
+    color: white;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s ease;
+  }
+
+  button:hover:not(:disabled) { background: #5a9cae; }
+  button:disabled { background: #c9d8dc; cursor: default; }
+
+  .result-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.95rem;
+  }
+
+  .result-row:last-child { border-bottom: none; }
+
+  .result-label { color: var(--text-muted); }
+  .result-value { font-weight: 600; }
+
+  .status {
+    font-size: 0.9rem;
+    margin-top: 12px;
+  }
+
+  .status.error { color: #b0554a; }
+  .status.loading { color: var(--text-muted); }
+
+  #fileName {
+    font-weight: 600;
+    color: var(--text);
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>BauOS – Rechnungserkennung</h1>
+  <p class="subtitle">Rechnung hochladen und automatisch auslesen lassen.</p>
+
+  <div class="card">
+    <label class="dropzone" id="dropzone">
+      <div id="dropzoneText">
+        <strong>PDF-Rechnung auswählen</strong>
+        <p>oder hierher ziehen</p>
+      </div>
+      <span id="fileName"></span>
+      <input type="file" id="fileInput" accept="application/pdf">
+    </label>
+    <button id="submitBtn" disabled>Rechnung analysieren</button>
+    <div id="status" class="status"></div>
+  </div>
+
+  <div class="card" id="resultCard" style="display:none">
+    <div class="result-row"><span class="result-label">Lieferant</span><span class="result-value" id="r-supplier">–</span></div>
+    <div class="result-row"><span class="result-label">Gesamtbetrag</span><span class="result-value" id="r-amount">–</span></div>
+    <div class="result-row"><span class="result-label">Zahlbar bis</span><span class="result-value" id="r-due">–</span></div>
+    <div class="result-row"><span class="result-label">Zahlungsziel</span><span class="result-value" id="r-term">–</span></div>
+    <div class="result-row"><span class="result-label">Skonto</span><span class="result-value" id="r-skonto">–</span></div>
+  </div>
+</main>
+
+<script>
+  const dropzone = document.getElementById("dropzone");
+  const fileInput = document.getElementById("fileInput");
+  const fileName = document.getElementById("fileName");
+  const submitBtn = document.getElementById("submitBtn");
+  const statusEl = document.getElementById("status");
+  const resultCard = document.getElementById("resultCard");
+
+  let selectedFile = null;
+
+  function setFile(file) {
+    if (!file) return;
+    selectedFile = file;
+    fileName.textContent = file.name;
+    submitBtn.disabled = false;
+    statusEl.textContent = "";
+    statusEl.className = "status";
+  }
+
+  fileInput.addEventListener("change", () => setFile(fileInput.files[0]));
+
+  dropzone.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    dropzone.classList.add("dragover");
+  });
+  dropzone.addEventListener("dragleave", () => dropzone.classList.remove("dragover"));
+  dropzone.addEventListener("drop", (e) => {
+    e.preventDefault();
+    dropzone.classList.remove("dragover");
+    setFile(e.dataTransfer.files[0]);
+  });
+
+  function formatValue(value, suffix = "") {
+    return value === null || value === undefined || value === "" ? "–" : `${value}${suffix}`;
+  }
+
+  submitBtn.addEventListener("click", async () => {
+    if (!selectedFile) return;
+
+    submitBtn.disabled = true;
+    statusEl.textContent = "Wird analysiert …";
+    statusEl.className = "status loading";
+    resultCard.style.display = "none";
+
+    const formData = new FormData();
+    formData.append("file", selectedFile);
+
+    try {
+      const response = await fetch("/invoices/parse", { method: "POST", body: formData });
+      if (!response.ok) {
+        const detail = await response.json().catch(() => ({}));
+        throw new Error(detail.detail || `Fehler ${response.status}`);
+      }
+      const data = await response.json();
+
+      document.getElementById("r-supplier").textContent = formatValue(data.supplier);
+      document.getElementById("r-amount").textContent =
+        data.total_amount != null ? `${data.total_amount} ${data.currency || ""}`.trim() : "–";
+      document.getElementById("r-due").textContent = formatValue(data.due_date);
+      document.getElementById("r-term").textContent = formatValue(data.payment_term_days, " Tage");
+      document.getElementById("r-skonto").textContent =
+        data.skonto_percent != null
+          ? `${data.skonto_percent}% ${data.skonto_date ? "bis " + data.skonto_date : ""}`.trim()
+          : "–";
+
+      resultCard.style.display = "block";
+      statusEl.textContent = "";
+    } catch (err) {
+      statusEl.textContent = err.message || "Etwas ist schiefgelaufen.";
+      statusEl.className = "status error";
+    } finally {
+      submitBtn.disabled = false;
+    }
+  });
+</script>
+</body>
+</html>

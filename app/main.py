@@ -2,11 +2,17 @@ import io
 
 import pdfplumber
 from fastapi import FastAPI, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 
 from app.ai_invoice_extractor import extract_invoice_with_ai
 from app.invoice_parser import parse_invoice_text
 
 app = FastAPI(title="BauOS Invoice MVP")
+
+
+@app.get("/")
+def frontend() -> FileResponse:
+    return FileResponse("app/static/index.html")
 
 
 def _extract_text_from_pdf(file_bytes: bytes) -> str:
