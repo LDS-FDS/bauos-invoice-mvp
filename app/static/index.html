@@ -30,7 +30,7 @@
 
   main {
     width: 100%;
-    max-width: 560px;
+    max-width: 760px;
   }
 
   h1 {
@@ -117,6 +117,79 @@
     font-weight: 600;
     color: var(--text);
   }
+
+  h2 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin: 0 0 16px;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+  }
+
+  th {
+    text-align: left;
+    color: var(--text-muted);
+    font-weight: 600;
+    padding: 8px 10px;
+    border-bottom: 2px solid var(--border);
+  }
+
+  td {
+    padding: 10px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: middle;
+  }
+
+  tr.row-overdue td { background: #f7e6e0; }
+  tr.row-skonto td { background: #eaf5f8; }
+  tr.row-paid td { color: var(--text-muted); }
+
+  .badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 600;
+  }
+
+  .badge.offen { background: var(--blue); color: #1e4a55; }
+  .badge.bezahlt { background: #d8e6d3; color: #3d5c34; }
+
+  .row-actions {
+    display: flex;
+    gap: 6px;
+    white-space: nowrap;
+  }
+
+  .row-actions button {
+    width: auto;
+    margin-top: 0;
+    padding: 6px 12px;
+    font-size: 0.8rem;
+  }
+
+  .btn-secondary {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text);
+  }
+  .btn-secondary:hover:not(:disabled) { background: var(--beige); }
+
+  .btn-danger {
+    background: transparent;
+    border: 1px solid #e0bdb4;
+    color: #b0554a;
+  }
+  .btn-danger:hover:not(:disabled) { background: #f7e6e0; }
+
+  .empty-hint {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+  }
 </style>
 </head>
 <body>
@@ -147,6 +220,27 @@
     <div class="result-row"><span class="result-label">Rechnungsbetrag mit Skonto</span><span class="result-value" id="r-amount-skonto">–</span></div>
     <div class="result-row"><span class="result-label">Zahlbar bis mit Skonto</span><span class="result-value" id="r-due-skonto">–</span></div>
     <div class="result-row"><span class="result-label">Konto</span><span class="result-value" id="r-account">–</span></div>
+  </div>
+
+  <div class="card">
+    <h2>Alle Rechnungen</h2>
+    <div id="invoiceListWrapper">
+      <p class="empty-hint" id="emptyHint">Noch keine Rechnungen gespeichert.</p>
+      <table id="invoiceTable" style="display:none">
+        <thead>
+          <tr>
+            <th>Nr.</th>
+            <th>Lieferant</th>
+            <th>Betrag</th>
+            <th>Zahlbar bis</th>
+            <th>Skonto bis</th>
+            <th>Status</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="invoiceTableBody"></tbody>
+      </table>
+    </div>
   </div>
 </main>
 
@@ -222,6 +316,7 @@
 
       resultCard.style.display = "block";
       statusEl.textContent = "";
+      await loadInvoices();
     } catch (err) {
       statusEl.textContent = err.message || "Etwas ist schiefgelaufen.";
       statusEl.className = "status error";
@@ -229,6 +324,101 @@
       submitBtn.disabled = false;
     }
   });
+
+  function parseGermanDate(str) {
+    if (!str) return null;
+    const parts = str.split(".").map(Number);
+    if (parts.length !== 3 || parts.some(Number.isNaN)) return null;
+    const [day, month, year] = parts;
+    return new Date(year, month - 1, day);
+  }
+
+  function startOfToday() {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return today;
+  }
+
+  function rowClass(invoice) {
+    if (invoice.status === "bezahlt") return "row-paid";
+    const today = startOfToday();
+    const due = parseGermanDate(invoice.due_date);
+    if (due && due < today) return "row-overdue";
+    const skontoDate = parseGermanDate(invoice.skonto_date);
+    if (skontoDate && skontoDate >= today) return "row-skonto";
+    return "";
+  }
+
+  async function toggleStatus(id, currentStatus) {
+    const nextStatus = currentStatus === "bezahlt" ? "offen" : "bezahlt";
+    await fetch(`/invoices/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: nextStatus }),
+    });
+    await loadInvoices();
+  }
+
+  async function deleteInvoice(id) {
+    await fetch(`/invoices/${id}`, { method: "DELETE" });
+    await loadInvoices();
+  }
+
+  async function loadInvoices() {
+    const response = await fetch("/invoices");
+    const invoices = await response.json();
+
+    const table = document.getElementById("invoiceTable");
+    const emptyHint = document.getElementById("emptyHint");
+    const tbody = document.getElementById("invoiceTableBody");
+    tbody.innerHTML = "";
+
+    if (invoices.length === 0) {
+      table.style.display = "none";
+      emptyHint.style.display = "block";
+      return;
+    }
+    table.style.display = "table";
+    emptyHint.style.display = "none";
+
+    for (const invoice of invoices) {
+      const tr = document.createElement("tr");
+      tr.className = rowClass(invoice);
+
+      const amount = invoice.total_amount != null
+        ? `${invoice.total_amount} ${invoice.currency || ""}`.trim()
+        : "–";
+
+      tr.innerHTML = `
+        <td>${invoice.invoice_number || "–"}</td>
+        <td>${invoice.supplier || "–"}</td>
+        <td>${amount}</td>
+        <td>${invoice.due_date || "–"}</td>
+        <td>${invoice.skonto_date || "–"}</td>
+        <td><span class="badge ${invoice.status}">${invoice.status}</span></td>
+        <td class="row-actions">
+          <button class="btn-secondary" data-action="toggle" data-id="${invoice.id}" data-status="${invoice.status}">
+            ${invoice.status === "bezahlt" ? "Als offen markieren" : "Als bezahlt markieren"}
+          </button>
+          <button class="btn-danger" data-action="delete" data-id="${invoice.id}">Löschen</button>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    }
+  }
+
+  document.getElementById("invoiceTableBody").addEventListener("click", (e) => {
+    const btn = e.target.closest("button");
+    if (!btn) return;
+    const id = btn.dataset.id;
+    if (btn.dataset.action === "toggle") {
+      toggleStatus(id, btn.dataset.status);
+    } else if (btn.dataset.action === "delete") {
+      deleteInvoice(id);
+    }
+  });
+
+  loadInvoices();
 </script>
 </body>
 </html>
