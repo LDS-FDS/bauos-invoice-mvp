@@ -34,9 +34,22 @@ curl -X POST -F "file=@rechnung.pdf" http://127.0.0.1:8000/invoices/parse
 pytest
 ```
 
+## KI-gestützte Extraktion (Fallback)
+
+Findet der regelbasierte Parser keinen Gesamtbetrag (z.B. bei unstrukturierten oder
+abweichend formulierten Rechnungen), greift automatisch eine KI-Extraktion über die
+Anthropic API (`claude-opus-5`). Dafür wird ein eigener API-Key benötigt:
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
+```
+
+Ohne gesetzten Key schlägt nur der KI-Fallback fehl; der regelbasierte Parser funktioniert
+unabhängig davon. Die KI-Tests (`tests/test_ai_invoice_extractor.py`) mocken den API-Client
+und rufen die echte API nicht auf.
+
 ## Aktueller Stand
 
-Die Extraktion basiert auf regelbasierten Mustern für typische deutsche Rechnungsformulierungen
-(z.B. "Gesamtbetrag", "Zahlbar bis", "X% Skonto"). Als nächster Schritt bietet sich eine
-KI-gestützte Extraktion an, die auch unstrukturierte oder abweichend formulierte Rechnungen
-zuverlässig erfasst.
+Zwei Extraktionswege: ein regelbasierter Parser für typische deutsche Rechnungsformulierungen
+(z.B. "Gesamtbetrag", "Zahlbar bis", "X% Skonto"), und ein KI-gestützter Fallback für alles,
+was das Regex-Schema nicht trifft.

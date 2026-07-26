@@ -3,6 +3,7 @@ import io
 import pdfplumber
 from fastapi import FastAPI, HTTPException, UploadFile
 
+from app.ai_invoice_extractor import extract_invoice_with_ai
 from app.invoice_parser import parse_invoice_text
 
 app = FastAPI(title="BauOS Invoice MVP")
@@ -30,4 +31,8 @@ async def parse_invoice(file: UploadFile):
 
     file_bytes = await file.read()
     text = _extract_text_from_pdf(file_bytes)
-    return parse_invoice_text(text)
+
+    result = parse_invoice_text(text)
+    if result.total_amount is None:
+        return extract_invoice_with_ai(text)
+    return result
