@@ -27,13 +27,14 @@ def _mock_client(payload: dict, stop_reason: str = "end_turn") -> MagicMock:
 def test_extracts_fields_from_ai_response():
     payload = {
         "supplier": "Handwerksbetrieb Schmidt",
+        "invoice_number": None,
+        "invoice_date": None,
         "total_amount": 980.50,
         "currency": "EUR",
         "due_date": None,
-        "payment_term_days": None,
         "skonto_percent": 3.0,
         "skonto_date": None,
-        "skonto_days": None,
+        "bank_account": None,
     }
     client = _mock_client(payload)
 
@@ -46,7 +47,20 @@ def test_extracts_fields_from_ai_response():
 
 
 def test_raises_on_refusal():
-    client = _mock_client({}, stop_reason="refusal")
+    client = _mock_client(
+        {
+            "supplier": None,
+            "invoice_number": None,
+            "invoice_date": None,
+            "total_amount": None,
+            "currency": None,
+            "due_date": None,
+            "skonto_percent": None,
+            "skonto_date": None,
+            "bank_account": None,
+        },
+        stop_reason="refusal",
+    )
 
     with pytest.raises(InvoiceExtractionRefused):
         extract_invoice_with_ai(UNSTRUCTURED_INVOICE, client=client)

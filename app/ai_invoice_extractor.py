@@ -11,26 +11,37 @@ INVOICE_SCHEMA = {
     "type": "object",
     "properties": {
         "supplier": {"type": ["string", "null"]},
+        "invoice_number": {"type": ["string", "null"]},
+        "invoice_date": {
+            "type": ["string", "null"],
+            "description": "Format DD.MM.YYYY if stated",
+        },
         "total_amount": {"type": ["number", "null"]},
         "currency": {"type": ["string", "null"]},
         "due_date": {
             "type": ["string", "null"],
             "description": "Format DD.MM.YYYY if a due date is stated",
         },
-        "payment_term_days": {"type": ["integer", "null"]},
         "skonto_percent": {"type": ["number", "null"]},
-        "skonto_date": {"type": ["string", "null"]},
-        "skonto_days": {"type": ["integer", "null"]},
+        "skonto_date": {
+            "type": ["string", "null"],
+            "description": "Format DD.MM.YYYY - the earlier due date if Skonto is paid within it",
+        },
+        "bank_account": {
+            "type": ["string", "null"],
+            "description": "IBAN or other bank account identifier the invoice should be paid to",
+        },
     },
     "required": [
         "supplier",
+        "invoice_number",
+        "invoice_date",
         "total_amount",
         "currency",
         "due_date",
-        "payment_term_days",
         "skonto_percent",
         "skonto_date",
-        "skonto_days",
+        "bank_account",
     ],
     "additionalProperties": False,
 }
@@ -38,9 +49,10 @@ INVOICE_SCHEMA = {
 SYSTEM_PROMPT = (
     "You extract structured data from German construction-industry invoices, "
     "including ones with unusual layout or wording that a regex parser would miss. "
-    "Read the raw invoice text and extract: supplier name, total amount, currency, "
-    "payment due date, payment term in days, and Skonto (early-payment discount) "
-    "percent/date/days if present. Use null for anything not stated in the text. "
+    "Read the raw invoice text and extract: supplier name, invoice number, invoice date, "
+    "total amount, currency, payment due date, and Skonto (early-payment discount) "
+    "percent/date, plus the bank account (IBAN) the invoice should be paid to. "
+    "Use null for anything not stated in the text. "
     "Never guess or infer a value that isn't actually written in the invoice."
 )
 
@@ -52,13 +64,14 @@ class InvoiceExtractionRefused(RuntimeError):
 @dataclass
 class AIInvoiceData:
     supplier: str | None
+    invoice_number: str | None
+    invoice_date: str | None
     total_amount: float | None
     currency: str | None
     due_date: str | None
-    payment_term_days: int | None
     skonto_percent: float | None
     skonto_date: str | None
-    skonto_days: int | None
+    bank_account: str | None
 
 
 def extract_invoice_with_ai(

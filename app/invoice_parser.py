@@ -7,6 +7,16 @@ _LEGAL_FORM_RE = re.compile(
     r"^.{0,80}\b(GmbH\s*&\s*Co\.?\s*KG|GmbH|AG|KG|OHG|UG|e\.\s?K\.)\b.{0,40}$"
 )
 
+_INVOICE_NUMBER_RE = re.compile(
+    r"Rechnung(?:s?nummer|\s*Nr\.?)\s*[:.]?\s*([A-Za-z0-9\-/]+)",
+    re.IGNORECASE,
+)
+
+_INVOICE_DATE_RE = re.compile(
+    r"(?:Rechnungsdatum|Datum)\s*[:.]?\s*(\d{1,2}\.\d{1,2}\.\d{2,4})",
+    re.IGNORECASE,
+)
+
 _AMOUNT_LABEL_RE = re.compile(
     r"(?:Gesamtbetrag|Rechnungsbetrag|Endbetrag|Bruttobetrag)"
     r"[^\d\n]{0,20}([\d.]+,\d{2})\s*(EUR|€)?",
@@ -14,19 +24,17 @@ _AMOUNT_LABEL_RE = re.compile(
 )
 
 _DUE_DATE_RE = re.compile(
-    r"(?:Zahlbar\s+bis|F[äa]llig\s+am|Zahlungsziel)\D{0,10}(\d{1,2}\.\d{1,2}\.\d{2,4})",
-    re.IGNORECASE,
-)
-
-_PAYMENT_TERM_DAYS_RE = re.compile(
-    r"Zahlungsziel\D{0,10}(\d{1,3})\s*Tage",
+    r"(?:Zahlbar\s+bis|F[äa]llig\s+am)\D{0,10}(\d{1,2}\.\d{1,2}\.\d{2,4})",
     re.IGNORECASE,
 )
 
 _SKONTO_RE = re.compile(
-    r"(\d{1,2}(?:,\d+)?)\s*%\s*Skonto"
-    r"(?:[^\d\n]{0,30}(\d{1,2}\.\d{1,2}\.\d{2,4})"
-    r"|[^\d\n]{0,20}innerhalb\D{0,5}(\d{1,3})\s*Tagen)?",
+    r"(\d{1,2}(?:,\d+)?)\s*%\s*Skonto(?:[^\d\n]{0,30}(\d{1,2}\.\d{1,2}\.\d{2,4}))?",
+    re.IGNORECASE,
+)
+
+_IBAN_RE = re.compile(
+    r"IBAN\s*[:.]?\s*([A-Z]{2}[0-9A-Z ]{13,32})",
     re.IGNORECASE,
 )
 
@@ -34,13 +42,14 @@ _SKONTO_RE = re.compile(
 @dataclass
 class InvoiceData:
     supplier: str | None
+    invoice_number: str | None
+    invoice_date: str | None
     total_amount: float | None
     currency: str | None
     due_date: str | None
-    payment_term_days: int | None
     skonto_percent: float | None
     skonto_date: str | None
-    skonto_days: int | None
+    bank_account: str | None
 
 
 def _parse_german_amount(raw: str) -> float:
@@ -58,9 +67,17 @@ def _extract_supplier(lines: list[str]) -> str | None:
 
 
 def parse_invoice_text(text: str) -> InvoiceData:
-    lines = [line for line in text.splitlines()]
+    lines = text.splitlines()
 
     supplier = _extract_supplier(lines)
+
+    invoice_number = None
+    if match := _INVOICE_NUMBER_RE.search(text):
+        invoice_number = match.group(1)
+
+    invoice_date = None
+    if match := _INVOICE_DATE_RE.search(text):
+        invoice_date = match.group(1)
 
     total_amount = None
     currency = None
@@ -72,25 +89,24 @@ def parse_invoice_text(text: str) -> InvoiceData:
     if match := _DUE_DATE_RE.search(text):
         due_date = match.group(1)
 
-    payment_term_days = None
-    if match := _PAYMENT_TERM_DAYS_RE.search(text):
-        payment_term_days = int(match.group(1))
-
     skonto_percent = None
     skonto_date = None
-    skonto_days = None
     if match := _SKONTO_RE.search(text):
         skonto_percent = float(match.group(1).replace(",", "."))
         skonto_date = match.group(2)
-        skonto_days = int(match.group(3)) if match.group(3) else None
+
+    bank_account = None
+    if match := _IBAN_RE.search(text):
+        bank_account = match.group(1).replace(" ", "").upper()
 
     return InvoiceData(
         supplier=supplier,
+        invoice_number=invoice_number,
+        invoice_date=invoice_date,
         total_amount=total_amount,
         currency=currency,
         due_date=due_date,
-        payment_term_days=payment_term_days,
         skonto_percent=skonto_percent,
         skonto_date=skonto_date,
-        skonto_days=skonto_days,
+        bank_account=bank_account,
     )

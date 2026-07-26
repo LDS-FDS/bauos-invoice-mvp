@@ -30,6 +30,25 @@ def health() -> dict:
     return {"status": "ok"}
 
 
+def _build_response(data) -> dict:
+    amount_with_skonto = None
+    if data.total_amount is not None and data.skonto_percent is not None:
+        amount_with_skonto = round(data.total_amount * (1 - data.skonto_percent / 100), 2)
+
+    return {
+        "supplier": data.supplier,
+        "invoice_number": data.invoice_number,
+        "invoice_date": data.invoice_date,
+        "total_amount": data.total_amount,
+        "currency": data.currency,
+        "due_date": data.due_date,
+        "skonto_percent": data.skonto_percent,
+        "amount_with_skonto": amount_with_skonto,
+        "skonto_date": data.skonto_date,
+        "bank_account": data.bank_account,
+    }
+
+
 @app.post("/invoices/parse")
 async def parse_invoice(file: UploadFile):
     if file.content_type != "application/pdf":
@@ -40,5 +59,5 @@ async def parse_invoice(file: UploadFile):
 
     result = parse_invoice_text(text)
     if result.total_amount is None:
-        return extract_invoice_with_ai(text)
-    return result
+        result = extract_invoice_with_ai(text)
+    return _build_response(result)

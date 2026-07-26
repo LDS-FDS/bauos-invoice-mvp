@@ -139,10 +139,14 @@
 
   <div class="card" id="resultCard" style="display:none">
     <div class="result-row"><span class="result-label">Lieferant</span><span class="result-value" id="r-supplier">–</span></div>
+    <div class="result-row"><span class="result-label">Rechnungsnummer</span><span class="result-value" id="r-invoice-number">–</span></div>
+    <div class="result-row"><span class="result-label">Rechnungsdatum</span><span class="result-value" id="r-invoice-date">–</span></div>
     <div class="result-row"><span class="result-label">Gesamtbetrag</span><span class="result-value" id="r-amount">–</span></div>
     <div class="result-row"><span class="result-label">Zahlbar bis</span><span class="result-value" id="r-due">–</span></div>
-    <div class="result-row"><span class="result-label">Zahlungsziel</span><span class="result-value" id="r-term">–</span></div>
     <div class="result-row"><span class="result-label">Skonto</span><span class="result-value" id="r-skonto">–</span></div>
+    <div class="result-row"><span class="result-label">Rechnungsbetrag mit Skonto</span><span class="result-value" id="r-amount-skonto">–</span></div>
+    <div class="result-row"><span class="result-label">Zahlbar bis mit Skonto</span><span class="result-value" id="r-due-skonto">–</span></div>
+    <div class="result-row"><span class="result-label">Konto</span><span class="result-value" id="r-account">–</span></div>
   </div>
 </main>
 
@@ -202,14 +206,19 @@
       const data = await response.json();
 
       document.getElementById("r-supplier").textContent = formatValue(data.supplier);
+      document.getElementById("r-invoice-number").textContent = formatValue(data.invoice_number);
+      document.getElementById("r-invoice-date").textContent = formatValue(data.invoice_date);
       document.getElementById("r-amount").textContent =
         data.total_amount != null ? `${data.total_amount} ${data.currency || ""}`.trim() : "–";
       document.getElementById("r-due").textContent = formatValue(data.due_date);
-      document.getElementById("r-term").textContent = formatValue(data.payment_term_days, " Tage");
       document.getElementById("r-skonto").textContent =
-        data.skonto_percent != null
-          ? `${data.skonto_percent}% ${data.skonto_date ? "bis " + data.skonto_date : ""}`.trim()
+        data.skonto_percent != null ? `${data.skonto_percent}%` : "–";
+      document.getElementById("r-amount-skonto").textContent =
+        data.amount_with_skonto != null
+          ? `${data.amount_with_skonto} ${data.currency || ""}`.trim()
           : "–";
+      document.getElementById("r-due-skonto").textContent = formatValue(data.skonto_date);
+      document.getElementById("r-account").textContent = formatValue(data.bank_account);
 
       resultCard.style.display = "block";
       statusEl.textContent = "";
