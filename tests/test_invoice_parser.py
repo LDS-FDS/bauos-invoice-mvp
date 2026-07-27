@@ -185,3 +185,31 @@ def test_skonto_from_bis_zum_erhalten_sie_pattern():
 def test_skonto_amount_is_none_when_not_stated():
     result = parse_invoice_text(SAMPLE_INVOICE)
     assert result.skonto_amount is None
+
+
+# POS-style receipts (e.g. paid immediately by card) use "Beleg-Nr." instead
+# of "Rechnung Nr." and state the actually-paid amount as "Gegeben: ...".
+
+POS_RECEIPT = """
+Beispiel Baustoff GmbH & Co.KG
+Rechnung
+Datum: 11.06.2026 13:11
+Beleg-Nr.: 4261412100202
+
+Brutto-Summe: 963,02EUR
+- 2,00% Skonto: 19,26EUR
+Brutto-Summe: 943,76EUR
+
+Gegeben: EC-Cash 943,76EUR
+"""
+
+
+def test_invoice_number_from_beleg_nr_label():
+    result = parse_invoice_text(POS_RECEIPT)
+    assert result.invoice_number == "4261412100202"
+
+
+def test_amount_from_gegeben_pattern():
+    result = parse_invoice_text(POS_RECEIPT)
+    assert result.total_amount == 943.76
+    assert result.currency == "EUR"
