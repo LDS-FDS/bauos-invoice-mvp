@@ -454,7 +454,9 @@
         <input type="text" id="companyTaxId" placeholder="USt-IdNr." class="span-2">
         <input type="text" id="companyBankName" placeholder="Bank">
         <input type="text" id="companyBankIban" placeholder="IBAN">
+        <input type="number" id="companyPaymentTermDays" placeholder="Standard-Zahlungsziel (Tage)" class="span-2">
       </div>
+      <p class="empty-hint">Wird verwendet, um "Zahlbar bis" bei neuen Rechnungen automatisch zu berechnen (Rechnungsdatum + Tage). Leer lassen, um es manuell einzutragen.</p>
       <button id="saveCompanyBtn">Speichern</button>
       <div id="companyStatus" class="status"></div>
     </div>
@@ -798,6 +800,7 @@
     companyTaxId: "tax_id",
     companyBankName: "bank_name",
     companyBankIban: "bank_iban",
+    companyPaymentTermDays: "default_payment_term_days",
   };
 
   async function loadCompanySettings() {
@@ -812,7 +815,10 @@
     const statusEl = document.getElementById("companyStatus");
     const payload = {};
     for (const [elementId, field] of Object.entries(companyFieldMap)) {
-      payload[field] = document.getElementById(elementId).value.trim() || null;
+      const rawValue = document.getElementById(elementId).value.trim();
+      payload[field] = field === "default_payment_term_days"
+        ? (rawValue ? parseInt(rawValue, 10) : null)
+        : (rawValue || null);
     }
 
     const response = await fetch("/company-settings", {
