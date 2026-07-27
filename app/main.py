@@ -6,7 +6,7 @@ from fastapi import FastAPI, HTTPException, UploadFile
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 
-from app import company_settings, customers_db, db, documents_db
+from app import company_settings, customers_db, db, documents_db, projects_db
 from app.ai_invoice_extractor import extract_invoice_from_image, extract_invoice_with_ai
 from app.document_pdf import build_document_pdf
 from app.invoice_parser import parse_invoice_text
@@ -16,6 +16,7 @@ app = FastAPI(title="BauOS Invoice MVP")
 db.init_db()
 customers_db.init_customers_table()
 company_settings.init_company_settings_table()
+projects_db.init_projects_table()
 documents_db.init_documents_tables()
 
 
@@ -89,8 +90,8 @@ async def parse_invoice(file: UploadFile):
 
 
 @app.get("/invoices")
-def get_invoices() -> list[dict]:
-    return db.list_invoices()
+def get_invoices(project_id: int | None = None) -> list[dict]:
+    return db.list_invoices(project_id)
 
 
 @app.get("/invoices/export/pdf")
@@ -119,6 +120,19 @@ def delete_invoice(invoice_id: int) -> dict:
     if not db.delete_invoice(invoice_id):
         raise HTTPException(status_code=404, detail="Invoice not found")
     return {"deleted": invoice_id}
+
+
+class ProjectAssignment(BaseModel):
+    project_id: int | None = None
+
+
+@app.put("/invoices/{invoice_id}/project")
+def assign_invoice_project(invoice_id: int, body: ProjectAssignment) -> dict:
+    if body.project_id is not None and projects_db.get_project(body.project_id) is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if not db.assign_invoice_project(invoice_id, body.project_id):
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    return db.get_invoice(invoice_id)
 
 
 class CustomerIn(BaseModel):
@@ -201,6 +215,7 @@ class DocumentCreate(BaseModel):
     valid_until: str | None = None
     due_date: str | None = None
     notes: str | None = None
+    project_id: int | None = None
     items: list[DocumentItemIn]
 
 
@@ -214,6 +229,8 @@ def create_document(payload: DocumentCreate) -> dict:
         raise HTTPException(status_code=404, detail="Customer not found")
     if not payload.items:
         raise HTTPException(status_code=400, detail="At least one item is required")
+    if payload.project_id is not None and projects_db.get_project(payload.project_id) is None:
+        raise HTTPException(status_code=404, detail="Project not found")
 
     document_id = documents_db.create_document(
         doc_type=payload.doc_type,
@@ -223,13 +240,17 @@ def create_document(payload: DocumentCreate) -> dict:
         valid_until=payload.valid_until,
         due_date=payload.due_date,
         notes=payload.notes,
+        project_id=payload.project_id,
     )
     return documents_db.get_document(document_id)
 
 
 @app.get("/documents")
-def list_documents(doc_type: Literal["angebot", "rechnung"] | None = None) -> list[dict]:
-    return documents_db.list_documents(doc_type)
+def list_documents(
+    doc_type: Literal["angebot", "rechnung"] | None = None,
+    project_id: int | None = None,
+) -> list[dict]:
+    return documents_db.list_documents(doc_type, project_id)
 
 
 @app.get("/documents/{document_id}")
@@ -278,3 +299,99 @@ def convert_document_to_invoice(document_id: int) -> dict:
             status_code=400, detail="Document not found or is not an Angebot"
         )
     return documents_db.get_document(new_id)
+
+
+@app.put("/documents/{document_id}/project")
+def assign_document_project(document_id: int, body: ProjectAssignment) -> dict:
+    if body.project_id is not None and projects_db.get_project(body.project_id) is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if not documents_db.assign_document_project(document_id, body.project_id):
+        raise HTTPException(status_code=404, detail="Document not found")
+    return documents_db.get_document(document_id)
+
+
+class ProjectIn(BaseModel):
+    name: str
+    customer_id: int | None = None
+    street: str | None = None
+    zip_code: str | None = None
+    city: str | None = None
+    status: Literal["aktiv", "abgeschlossen", "pausiert"] = "aktiv"
+    start_date: str | None = None
+    end_date: str | None = None
+    notes: str | None = None
+
+
+@app.post("/projects")
+def create_project(project: ProjectIn) -> dict:
+    if project.customer_id is not None and customers_db.get_customer(project.customer_id) is None:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    project_id = projects_db.create_project(project.model_dump())
+    return projects_db.get_project(project_id)
+
+
+@app.get("/projects")
+def list_projects() -> list[dict]:
+    return projects_db.list_projects()
+
+
+@app.get("/projects/{project_id}")
+def get_project(project_id: int) -> dict:
+    project = projects_db.get_project(project_id)
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return project
+
+
+@app.get("/projects/{project_id}/summary")
+def get_project_summary(project_id: int) -> dict:
+    project = projects_db.get_project(project_id)
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    invoices = db.list_invoices(project_id)
+    documents = documents_db.list_documents(project_id=project_id)
+
+    costs = sum(inv["total_amount"] or 0 for inv in invoices)
+    revenue = sum(
+        doc["gross_total"] or 0 for doc in documents if doc["doc_type"] == "rechnung"
+    )
+
+    return {
+        "project": project,
+        "invoices": invoices,
+        "documents": documents,
+        "costs": round(costs, 2),
+        "revenue": round(revenue, 2),
+        "balance": round(revenue - costs, 2),
+    }
+
+
+@app.patch("/projects/{project_id}")
+def update_project(project_id: int, project: ProjectIn) -> dict:
+    if project.customer_id is not None and customers_db.get_customer(project.customer_id) is None:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    if not projects_db.update_project(project_id, project.model_dump()):
+        raise HTTPException(status_code=404, detail="Project not found")
+    return projects_db.get_project(project_id)
+
+
+class ProjectStatusUpdate(BaseModel):
+    status: Literal["aktiv", "abgeschlossen", "pausiert"]
+
+
+@app.patch("/projects/{project_id}/status")
+def update_project_status(project_id: int, body: ProjectStatusUpdate) -> dict:
+    project = projects_db.get_project(project_id)
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    project["status"] = body.status
+    projects_db.update_project(project_id, project)
+    return projects_db.get_project(project_id)
+
+
+@app.delete("/projects/{project_id}")
+def delete_project(project_id: int) -> dict:
+    if not projects_db.delete_project(project_id):
+        raise HTTPException(status_code=404, detail="Project not found")
+    return {"deleted": project_id}

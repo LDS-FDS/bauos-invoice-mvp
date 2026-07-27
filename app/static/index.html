@@ -351,6 +351,7 @@
     <button class="tab-btn" data-tab="customers">Kunden</button>
     <button class="tab-btn" data-tab="settings">Firmendaten</button>
     <button class="tab-btn" data-tab="documents">Angebote &amp; Rechnungen</button>
+    <button class="tab-btn" data-tab="projects">Projekte</button>
   </div>
 
   <div class="tab-panel" data-panel="invoices">
@@ -395,6 +396,7 @@
             <th>Betrag</th>
             <th>Zahlbar bis</th>
             <th>Skonto bis</th>
+            <th>Projekt</th>
             <th>Status</th>
             <th></th>
           </tr>
@@ -473,6 +475,9 @@
         <select id="docCustomer" class="span-2">
           <option value="">Kunde wählen...</option>
         </select>
+        <select id="docProject" class="span-2">
+          <option value="">Kein Projekt</option>
+        </select>
         <div>
           <label class="empty-hint" style="display:block; margin-bottom:4px;">Datum</label>
           <input type="date" id="docIssueDate">
@@ -510,6 +515,7 @@
               <th>Nr.</th>
               <th>Typ</th>
               <th>Kunde</th>
+              <th>Projekt</th>
               <th>Datum</th>
               <th>Betrag</th>
               <th>Status</th>
@@ -521,9 +527,70 @@
       </div>
     </div>
   </div>
+
+  <div class="tab-panel" data-panel="projects" style="display:none">
+    <div class="card">
+      <h2>Neues Projekt</h2>
+      <div class="form-grid">
+        <input type="text" id="projName" placeholder="Projektname *" class="span-2">
+        <select id="projCustomer" class="span-2">
+          <option value="">Kunde wählen... (optional)</option>
+        </select>
+        <input type="text" id="projStreet" placeholder="Straße" class="span-2">
+        <input type="text" id="projZip" placeholder="PLZ">
+        <input type="text" id="projCity" placeholder="Ort">
+        <div>
+          <label class="empty-hint" style="display:block; margin-bottom:4px;">Start</label>
+          <input type="date" id="projStartDate">
+        </div>
+        <div>
+          <label class="empty-hint" style="display:block; margin-bottom:4px;">Ende</label>
+          <input type="date" id="projEndDate">
+        </div>
+        <textarea id="projNotes" class="span-2" placeholder="Notizen (optional)" rows="2"></textarea>
+      </div>
+      <button id="addProjectBtn">Projekt speichern</button>
+      <div id="projectStatus" class="status"></div>
+    </div>
+
+    <div class="card">
+      <h2>Alle Projekte</h2>
+      <div id="projectListWrapper">
+        <p class="empty-hint" id="projectEmptyHint">Noch keine Projekte angelegt.</p>
+        <table id="projectTable" style="display:none">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Kunde</th>
+              <th>Zeitraum</th>
+              <th>Status</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="projectTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
 </main>
 
 <script>
+  let allProjects = [];
+
+  async function refreshProjectsCache() {
+    allProjects = await (await fetch("/projects")).json();
+  }
+
+  function projectOptionsHtml(selectedId) {
+    const options = allProjects
+      .map(
+        (p) =>
+          `<option value="${p.id}" ${p.id === selectedId ? "selected" : ""}>${p.name}</option>`
+      )
+      .join("");
+    return `<option value="">–</option>${options}`;
+  }
+
   const dropzone = document.getElementById("dropzone");
   const fileInput = document.getElementById("fileInput");
   const fileName = document.getElementById("fileName");
@@ -675,6 +742,7 @@
         <td>${amount}</td>
         <td>${invoice.due_date || "–"}</td>
         <td>${invoice.skonto_date || "–"}</td>
+        <td><select class="invoice-project-select" data-id="${invoice.id}">${projectOptionsHtml(invoice.project_id)}</select></td>
         <td><span class="badge ${invoice.status}">${invoice.status}</span></td>
         <td class="row-actions">
           <button class="btn-secondary" data-action="toggle" data-id="${invoice.id}" data-status="${invoice.status}">
@@ -686,6 +754,16 @@
       tbody.appendChild(tr);
     }
   }
+
+  document.getElementById("invoiceTableBody").addEventListener("change", async (e) => {
+    if (!e.target.classList.contains("invoice-project-select")) return;
+    const projectId = e.target.value ? parseInt(e.target.value, 10) : null;
+    await fetch(`/invoices/${e.target.dataset.id}/project`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ project_id: projectId }),
+    });
+  });
 
   document.getElementById("invoiceTableBody").addEventListener("click", (e) => {
     const btn = e.target.closest("button");
@@ -910,6 +988,13 @@
       customers.map((c) => `<option value="${c.id}">${c.name}</option>`).join("");
   }
 
+  function loadProjectsIntoDocumentForm() {
+    const select = document.getElementById("docProject");
+    select.innerHTML =
+      '<option value="">Kein Projekt</option>' +
+      allProjects.map((p) => `<option value="${p.id}">${p.name}</option>`).join("");
+  }
+
   document.getElementById("createDocumentBtn").addEventListener("click", async () => {
     const statusEl = document.getElementById("documentStatus");
     const customerId = document.getElementById("docCustomer").value;
@@ -926,11 +1011,13 @@
     }
 
     const docType = docTypeSelect.value;
+    const projectValue = document.getElementById("docProject").value;
     const payload = {
       doc_type: docType,
       customer_id: parseInt(customerId, 10),
       issue_date: toGermanDate(document.getElementById("docIssueDate").value),
       notes: document.getElementById("docNotes").value.trim() || null,
+      project_id: projectValue ? parseInt(projectValue, 10) : null,
       items,
     };
     const dueValue = toGermanDate(docValidDueInput.value);
@@ -955,6 +1042,7 @@
     addItemRow();
     document.getElementById("docNotes").value = "";
     document.getElementById("docCustomer").value = "";
+    document.getElementById("docProject").value = "";
     await loadDocuments();
   });
 
@@ -995,6 +1083,7 @@
         <td>${doc.doc_number}</td>
         <td>${doc.doc_type === "angebot" ? "Angebot" : "Rechnung"}</td>
         <td>${doc.customer_name || "–"}</td>
+        <td><select class="document-project-select" data-id="${doc.id}">${projectOptionsHtml(doc.project_id)}</select></td>
         <td>${doc.issue_date || "–"}</td>
         <td>${formatEuro(doc.gross_total || 0)}</td>
         <td><select data-id="${doc.id}" class="doc-status-select">${optionsHtml}</select></td>
@@ -1007,6 +1096,16 @@
       tbody.appendChild(tr);
     }
   }
+
+  document.getElementById("documentTableBody").addEventListener("change", async (e) => {
+    if (!e.target.classList.contains("document-project-select")) return;
+    const projectId = e.target.value ? parseInt(e.target.value, 10) : null;
+    await fetch(`/documents/${e.target.dataset.id}/project`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ project_id: projectId }),
+    });
+  });
 
   document.getElementById("documentTableBody").addEventListener("click", async (e) => {
     const btn = e.target.closest("button");
@@ -1033,7 +1132,182 @@
 
   addItemRow();
   loadCustomersIntoDocumentForm();
+  loadProjectsIntoDocumentForm();
   loadDocuments();
+
+  // --- Projects ---
+  async function loadCustomersIntoProjectForm() {
+    const response = await fetch("/customers");
+    const customers = await response.json();
+    const select = document.getElementById("projCustomer");
+    select.innerHTML =
+      '<option value="">Kunde wählen... (optional)</option>' +
+      customers.map((c) => `<option value="${c.id}">${c.name}</option>`).join("");
+  }
+
+  document.getElementById("addProjectBtn").addEventListener("click", async () => {
+    const statusEl = document.getElementById("projectStatus");
+    const name = document.getElementById("projName").value.trim();
+    if (!name) {
+      statusEl.textContent = "Bitte einen Projektnamen angeben.";
+      statusEl.className = "status error";
+      return;
+    }
+    const customerValue = document.getElementById("projCustomer").value;
+    const payload = {
+      name,
+      customer_id: customerValue ? parseInt(customerValue, 10) : null,
+      street: document.getElementById("projStreet").value.trim() || null,
+      zip_code: document.getElementById("projZip").value.trim() || null,
+      city: document.getElementById("projCity").value.trim() || null,
+      start_date: toGermanDate(document.getElementById("projStartDate").value),
+      end_date: toGermanDate(document.getElementById("projEndDate").value),
+      notes: document.getElementById("projNotes").value.trim() || null,
+    };
+
+    const response = await fetch("/projects", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      statusEl.textContent = "Fehler beim Speichern.";
+      statusEl.className = "status error";
+      return;
+    }
+
+    statusEl.textContent = "";
+    ["projName", "projStreet", "projZip", "projCity", "projStartDate", "projEndDate", "projNotes"].forEach(
+      (id) => (document.getElementById(id).value = "")
+    );
+    document.getElementById("projCustomer").value = "";
+    await refreshProjectsCache();
+    await loadProjects();
+    await loadInvoices();
+    await loadDocuments();
+  });
+
+  const PROJECT_STATUS_OPTIONS = ["aktiv", "abgeschlossen", "pausiert"];
+
+  async function loadProjects() {
+    const response = await fetch("/projects");
+    const projects = await response.json();
+
+    const table = document.getElementById("projectTable");
+    const emptyHint = document.getElementById("projectEmptyHint");
+    const tbody = document.getElementById("projectTableBody");
+    tbody.innerHTML = "";
+
+    if (projects.length === 0) {
+      table.style.display = "none";
+      emptyHint.style.display = "block";
+      return;
+    }
+    table.style.display = "table";
+    emptyHint.style.display = "none";
+
+    for (const project of projects) {
+      const tr = document.createElement("tr");
+      const optionsHtml = PROJECT_STATUS_OPTIONS.map(
+        (s) => `<option value="${s}" ${s === project.status ? "selected" : ""}>${s}</option>`
+      ).join("");
+      const timeframe = [project.start_date, project.end_date].filter(Boolean).join(" – ") || "–";
+
+      tr.innerHTML = `
+        <td>${project.name}</td>
+        <td>${project.customer_name || "–"}</td>
+        <td>${timeframe}</td>
+        <td><select data-id="${project.id}" class="project-status-select">${optionsHtml}</select></td>
+        <td class="row-actions">
+          <button class="btn-secondary" data-action="details" data-id="${project.id}">Details</button>
+          <button class="btn-danger" data-action="delete" data-id="${project.id}">Löschen</button>
+        </td>
+      `;
+      tbody.appendChild(tr);
+
+      const detailRow = document.createElement("tr");
+      detailRow.className = "project-detail-row";
+      detailRow.style.display = "none";
+      detailRow.innerHTML = `<td colspan="5"><div></div></td>`;
+      tbody.appendChild(detailRow);
+    }
+  }
+
+  document.getElementById("projectTableBody").addEventListener("click", async (e) => {
+    const btn = e.target.closest("button");
+    if (!btn) return;
+    const id = btn.dataset.id;
+
+    if (btn.dataset.action === "delete") {
+      await fetch(`/projects/${id}`, { method: "DELETE" });
+      await refreshProjectsCache();
+      await loadProjects();
+      await loadInvoices();
+      await loadDocuments();
+    } else if (btn.dataset.action === "details") {
+      const row = btn.closest("tr");
+      const detailRow = row.nextElementSibling;
+      const isVisible = detailRow.style.display !== "none";
+      if (isVisible) {
+        detailRow.style.display = "none";
+        return;
+      }
+
+      const summary = await (await fetch(`/projects/${id}/summary`)).json();
+      const invoiceLines =
+        summary.invoices
+          .map(
+            (inv) =>
+              `<div>${inv.supplier || "–"} — ${inv.total_amount != null ? formatEuro(inv.total_amount) : "–"}</div>`
+          )
+          .join("") || '<div class="empty-hint">Keine Rechnungen zugeordnet.</div>';
+      const documentLines =
+        summary.documents
+          .map(
+            (d) =>
+              `<div>${d.doc_number} (${d.doc_type === "angebot" ? "Angebot" : "Rechnung"}) — ${formatEuro(d.gross_total || 0)}</div>`
+          )
+          .join("") || '<div class="empty-hint">Keine Angebote/Rechnungen zugeordnet.</div>';
+
+      detailRow.querySelector("div").innerHTML = `
+        <div class="totals-box" style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+          <div>
+            <strong>Eingehende Rechnungen</strong>
+            ${invoiceLines}
+          </div>
+          <div>
+            <strong>Angebote &amp; Rechnungen</strong>
+            ${documentLines}
+          </div>
+        </div>
+        <div class="totals-box">
+          <div><span>Kosten</span><span>${formatEuro(summary.costs)}</span></div>
+          <div><span>Erlöse</span><span>${formatEuro(summary.revenue)}</span></div>
+          <div class="grand"><span>Saldo</span><span>${formatEuro(summary.balance)}</span></div>
+        </div>
+      `;
+      detailRow.style.display = "table-row";
+    }
+  });
+
+  document.getElementById("projectTableBody").addEventListener("change", async (e) => {
+    if (!e.target.classList.contains("project-status-select")) return;
+    await fetch(`/projects/${e.target.dataset.id}/status`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: e.target.value }),
+    });
+  });
+
+  loadCustomersIntoProjectForm();
+  loadProjects();
+
+  refreshProjectsCache().then(() => {
+    loadProjectsIntoDocumentForm();
+    loadInvoices();
+    loadDocuments();
+  });
 </script>
 </body>
 </html>
