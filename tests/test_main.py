@@ -1,7 +1,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from app import company_settings, customers_db, db
+from app import company_settings, customers_db, db, documents_db
 from app import main as main_module
 from app.ai_invoice_extractor import AIInvoiceData
 from app.invoice_parser import InvoiceData
@@ -28,6 +28,7 @@ def client(tmp_path, monkeypatch):
     db.init_db()
     customers_db.init_customers_table()
     company_settings.init_company_settings_table()
+    documents_db.init_documents_tables()
     return TestClient(app)
 
 
@@ -250,3 +251,106 @@ def test_company_settings_save_and_retrieve(client):
 
     fetched = client.get("/company-settings")
     assert fetched.json()["bank_iban"] == "DE89370400440532013000"
+
+
+SAMPLE_ITEMS = [
+    {"description": "Trockenbauarbeiten", "quantity": 10, "unit": "Std.", "unit_price": 45.0, "tax_rate": 19.0},
+]
+
+
+def _create_customer(client) -> int:
+    return client.post("/customers", json=SAMPLE_CUSTOMER).json()["id"]
+
+
+def test_create_document_requires_existing_customer(client):
+    response = client.post(
+        "/documents",
+        json={"doc_type": "angebot", "customer_id": 9999, "items": SAMPLE_ITEMS},
+    )
+    assert response.status_code == 404
+
+
+def test_create_document_requires_items(client):
+    customer_id = _create_customer(client)
+    response = client.post(
+        "/documents", json={"doc_type": "angebot", "customer_id": customer_id, "items": []}
+    )
+    assert response.status_code == 400
+
+
+def test_document_lifecycle(client):
+    customer_id = _create_customer(client)
+
+    created = client.post(
+        "/documents",
+        json={"doc_type": "angebot", "customer_id": customer_id, "items": SAMPLE_ITEMS},
+    )
+    assert created.status_code == 200
+    document = created.json()
+    assert document["doc_number"].startswith("ANG-")
+    assert document["status"] == "entwurf"
+    assert document["gross_total"] == 535.5
+
+    listed = client.get("/documents").json()
+    assert len(listed) == 1
+
+    fetched = client.get(f"/documents/{document['id']}")
+    assert fetched.status_code == 200
+    assert len(fetched.json()["items"]) == 1
+
+    patched = client.patch(f"/documents/{document['id']}", json={"status": "angenommen"})
+    assert patched.status_code == 200
+    assert patched.json()["status"] == "angenommen"
+
+    pdf_response = client.get(f"/documents/{document['id']}/pdf")
+    assert pdf_response.status_code == 200
+    assert pdf_response.headers["content-type"] == "application/pdf"
+    assert pdf_response.content.startswith(b"%PDF")
+
+    deleted = client.delete(f"/documents/{document['id']}")
+    assert deleted.status_code == 200
+    assert client.get("/documents").json() == []
+
+
+def test_get_unknown_document_returns_404(client):
+    assert client.get("/documents/9999").status_code == 404
+
+
+def test_update_unknown_document_returns_404(client):
+    response = client.patch("/documents/9999", json={"status": "angenommen"})
+    assert response.status_code == 404
+
+
+def test_delete_unknown_document_returns_404(client):
+    assert client.delete("/documents/9999").status_code == 404
+
+
+def test_document_pdf_for_unknown_document_returns_404(client):
+    assert client.get("/documents/9999/pdf").status_code == 404
+
+
+def test_convert_angebot_to_invoice_endpoint(client):
+    customer_id = _create_customer(client)
+    angebot = client.post(
+        "/documents",
+        json={"doc_type": "angebot", "customer_id": customer_id, "items": SAMPLE_ITEMS},
+    ).json()
+
+    response = client.post(f"/documents/{angebot['id']}/convert-to-invoice")
+
+    assert response.status_code == 200
+    invoice = response.json()
+    assert invoice["doc_type"] == "rechnung"
+    assert invoice["converted_from_id"] == angebot["id"]
+
+
+def test_convert_invoice_returns_400(client):
+    customer_id = _create_customer(client)
+    rechnung = client.post(
+        "/documents",
+        json={"doc_type": "rechnung", "customer_id": customer_id, "items": SAMPLE_ITEMS},
+    ).json()
+
+    response = client.post(f"/documents/{rechnung['id']}/convert-to-invoice")
+
+    assert response.status_code == 400
