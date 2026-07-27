@@ -16,6 +16,7 @@ _COLUMNS = [
     "skonto_date",
     "amount_with_skonto",
     "bank_account",
+    "bank_name",
 ]
 
 
@@ -47,6 +48,7 @@ def init_db(db_path: Path | None = None) -> None:
                 skonto_date TEXT,
                 amount_with_skonto REAL,
                 bank_account TEXT,
+                bank_name TEXT,
                 status TEXT NOT NULL DEFAULT 'offen'
             )
             """

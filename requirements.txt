@@ -5,3 +5,4 @@ python-multipart==0.0.9
 pytest==8.3.3
 anthropic==0.120.0
 httpx==0.28.1
+reportlab==5.0.0

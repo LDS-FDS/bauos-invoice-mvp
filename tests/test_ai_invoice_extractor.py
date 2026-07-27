@@ -38,7 +38,9 @@ def test_extracts_fields_from_ai_response():
         "due_date": None,
         "skonto_percent": 3.0,
         "skonto_date": None,
+        "skonto_amount": None,
         "bank_account": None,
+        "bank_name": None,
     }
     client = _mock_client(payload)
 
@@ -61,7 +63,9 @@ def test_raises_on_refusal():
             "due_date": None,
             "skonto_percent": None,
             "skonto_date": None,
+            "skonto_amount": None,
             "bank_account": None,
+            "bank_name": None,
         },
         stop_reason="refusal",
     )
@@ -80,7 +84,9 @@ def test_extracts_fields_from_scanned_image():
         "due_date": None,
         "skonto_percent": None,
         "skonto_date": None,
+        "skonto_amount": None,
         "bank_account": None,
+        "bank_name": None,
     }
     client = _mock_client(payload)
 
@@ -104,7 +110,9 @@ def test_image_extraction_raises_on_refusal():
             "due_date": None,
             "skonto_percent": None,
             "skonto_date": None,
+            "skonto_amount": None,
             "bank_account": None,
+            "bank_name": None,
         },
         stop_reason="refusal",
     )

@@ -3,12 +3,13 @@ from typing import Literal
 
 import pdfplumber
 from fastapi import FastAPI, HTTPException, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 
 from app import db
 from app.ai_invoice_extractor import extract_invoice_from_image, extract_invoice_with_ai
 from app.invoice_parser import parse_invoice_text
+from app.pdf_export import build_invoice_list_pdf
 
 app = FastAPI(title="BauOS Invoice MVP")
 db.init_db()
@@ -43,8 +44,8 @@ def health() -> dict:
 
 
 def _build_response(data) -> dict:
-    amount_with_skonto = None
-    if data.total_amount is not None and data.skonto_percent is not None:
+    amount_with_skonto = data.skonto_amount
+    if amount_with_skonto is None and data.total_amount is not None and data.skonto_percent is not None:
         amount_with_skonto = round(data.total_amount * (1 - data.skonto_percent / 100), 2)
 
     return {
@@ -58,6 +59,7 @@ def _build_response(data) -> dict:
         "amount_with_skonto": amount_with_skonto,
         "skonto_date": data.skonto_date,
         "bank_account": data.bank_account,
+        "bank_name": data.bank_name,
     }
 
 
@@ -85,6 +87,16 @@ async def parse_invoice(file: UploadFile):
 @app.get("/invoices")
 def get_invoices() -> list[dict]:
     return db.list_invoices()
+
+
+@app.get("/invoices/export/pdf")
+def export_invoices_pdf() -> Response:
+    pdf_bytes = build_invoice_list_pdf(db.list_invoices())
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": "attachment; filename=rechnungsuebersicht.pdf"},
+    )
 
 
 class StatusUpdate(BaseModel):
