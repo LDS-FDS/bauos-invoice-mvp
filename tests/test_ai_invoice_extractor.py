@@ -3,7 +3,11 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from app.ai_invoice_extractor import InvoiceExtractionRefused, extract_invoice_with_ai
+from app.ai_invoice_extractor import (
+    InvoiceExtractionRefused,
+    extract_invoice_from_image,
+    extract_invoice_with_ai,
+)
 
 UNSTRUCTURED_INVOICE = """
 Handwerksbetrieb Schmidt
@@ -64,3 +68,46 @@ def test_raises_on_refusal():
 
     with pytest.raises(InvoiceExtractionRefused):
         extract_invoice_with_ai(UNSTRUCTURED_INVOICE, client=client)
+
+
+def test_extracts_fields_from_scanned_image():
+    payload = {
+        "supplier": "Dreiling Aufzugbau GmbH",
+        "invoice_number": "20252313",
+        "invoice_date": None,
+        "total_amount": 1234.56,
+        "currency": "EUR",
+        "due_date": None,
+        "skonto_percent": None,
+        "skonto_date": None,
+        "bank_account": None,
+    }
+    client = _mock_client(payload)
+
+    result = extract_invoice_from_image(b"fake-png-bytes", client=client)
+
+    assert result.supplier == "Dreiling Aufzugbau GmbH"
+    assert result.total_amount == 1234.56
+    call_kwargs = client.messages.create.call_args.kwargs
+    assert call_kwargs["messages"][0]["content"][0]["type"] == "image"
+    assert call_kwargs["messages"][0]["content"][0]["source"]["media_type"] == "image/png"
+
+
+def test_image_extraction_raises_on_refusal():
+    client = _mock_client(
+        {
+            "supplier": None,
+            "invoice_number": None,
+            "invoice_date": None,
+            "total_amount": None,
+            "currency": None,
+            "due_date": None,
+            "skonto_percent": None,
+            "skonto_date": None,
+            "bank_account": None,
+        },
+        stop_reason="refusal",
+    )
+
+    with pytest.raises(InvoiceExtractionRefused):
+        extract_invoice_from_image(b"fake-png-bytes", client=client)

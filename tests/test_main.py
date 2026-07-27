@@ -2,6 +2,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app import db
+from app import main as main_module
+from app.ai_invoice_extractor import AIInvoiceData
 from app.invoice_parser import InvoiceData
 from app.main import _build_response, app
 
@@ -94,3 +96,33 @@ def test_patch_unknown_invoice_returns_404(client):
 def test_delete_unknown_invoice_returns_404(client):
     response = client.delete("/invoices/999999")
     assert response.status_code == 404
+
+
+def test_scanned_pdf_uses_image_extraction(client, monkeypatch):
+    monkeypatch.setattr(main_module, "_extract_text_from_pdf", lambda file_bytes: "")
+    monkeypatch.setattr(main_module, "_render_first_page_as_png", lambda file_bytes: b"fake-png")
+    monkeypatch.setattr(
+        main_module,
+        "extract_invoice_from_image",
+        lambda image_bytes, client=None: AIInvoiceData(
+            supplier="Dreiling Aufzugbau GmbH",
+            invoice_number="20252313",
+            invoice_date=None,
+            total_amount=500.0,
+            currency="EUR",
+            due_date=None,
+            skonto_percent=None,
+            skonto_date=None,
+            bank_account=None,
+        ),
+    )
+
+    response = client.post(
+        "/invoices/parse",
+        files={"file": ("scan.pdf", b"%PDF-fake", "application/pdf")},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["supplier"] == "Dreiling Aufzugbau GmbH"
+    assert data["total_amount"] == 500.0

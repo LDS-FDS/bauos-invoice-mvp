@@ -7,7 +7,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from app import db
-from app.ai_invoice_extractor import extract_invoice_with_ai
+from app.ai_invoice_extractor import extract_invoice_from_image, extract_invoice_with_ai
 from app.invoice_parser import parse_invoice_text
 
 app = FastAPI(title="BauOS Invoice MVP")
@@ -27,6 +27,14 @@ def _extract_text_from_pdf(file_bytes: bytes) -> str:
             if page_text:
                 text_parts.append(page_text)
     return "\n".join(text_parts)
+
+
+def _render_first_page_as_png(file_bytes: bytes) -> bytes:
+    with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
+        page_image = pdf.pages[0].to_image(resolution=200)
+        buffer = io.BytesIO()
+        page_image.original.save(buffer, format="PNG")
+        return buffer.getvalue()
 
 
 @app.get("/health")
@@ -61,9 +69,13 @@ async def parse_invoice(file: UploadFile):
     file_bytes = await file.read()
     text = _extract_text_from_pdf(file_bytes)
 
-    result = parse_invoice_text(text)
-    if result.total_amount is None:
-        result = extract_invoice_with_ai(text)
+    if not text.strip():
+        image_bytes = _render_first_page_as_png(file_bytes)
+        result = extract_invoice_from_image(image_bytes)
+    else:
+        result = parse_invoice_text(text)
+        if result.total_amount is None:
+            result = extract_invoice_with_ai(text)
 
     response = _build_response(result)
     invoice_id = db.save_invoice(response)

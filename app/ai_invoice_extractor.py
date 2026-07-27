@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 from dataclasses import dataclass
 
@@ -56,6 +57,16 @@ SYSTEM_PROMPT = (
     "Never guess or infer a value that isn't actually written in the invoice."
 )
 
+IMAGE_SYSTEM_PROMPT = (
+    "You extract structured data from a scanned or photographed German "
+    "construction-industry invoice image. Read the image and extract: supplier "
+    "name, invoice number, invoice date, total amount, currency, payment due "
+    "date, and Skonto (early-payment discount) percent/date, plus the bank "
+    "account (IBAN) the invoice should be paid to. Use null for anything not "
+    "visible or legible in the image. Never guess or infer a value that isn't "
+    "actually shown."
+)
+
 
 class InvoiceExtractionRefused(RuntimeError):
     pass
@@ -84,6 +95,45 @@ def extract_invoice_with_ai(
         max_tokens=1024,
         system=SYSTEM_PROMPT,
         messages=[{"role": "user", "content": text}],
+        output_config={"format": {"type": "json_schema", "schema": INVOICE_SCHEMA}},
+    )
+
+    if response.stop_reason == "refusal":
+        raise InvoiceExtractionRefused("AI extraction was declined by safety classifiers")
+
+    result_text = next(block.text for block in response.content if block.type == "text")
+    data = json.loads(result_text)
+    return AIInvoiceData(**data)
+
+
+def extract_invoice_from_image(
+    image_bytes: bytes,
+    media_type: str = "image/png",
+    client: anthropic.Anthropic | None = None,
+) -> AIInvoiceData:
+    client = client or anthropic.Anthropic()
+    image_b64 = base64.standard_b64encode(image_bytes).decode("utf-8")
+
+    response = client.messages.create(
+        model=MODEL,
+        max_tokens=1024,
+        system=IMAGE_SYSTEM_PROMPT,
+        messages=[
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": media_type,
+                            "data": image_b64,
+                        },
+                    },
+                    {"type": "text", "text": "Extract the invoice data from this image."},
+                ],
+            }
+        ],
         output_config={"format": {"type": "json_schema", "schema": INVOICE_SCHEMA}},
     )
 
