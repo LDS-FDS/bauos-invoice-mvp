@@ -1,7 +1,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from app import db
+from app import company_settings, customers_db, db
 from app import main as main_module
 from app.ai_invoice_extractor import AIInvoiceData
 from app.invoice_parser import InvoiceData
@@ -26,6 +26,8 @@ SAMPLE_INVOICE = {
 def client(tmp_path, monkeypatch):
     monkeypatch.setattr(db, "DEFAULT_DB_PATH", tmp_path / "test.db")
     db.init_db()
+    customers_db.init_customers_table()
+    company_settings.init_company_settings_table()
     return TestClient(app)
 
 
@@ -172,3 +174,79 @@ def test_scanned_pdf_uses_image_extraction(client, monkeypatch):
     data = response.json()
     assert data["supplier"] == "Dreiling Aufzugbau GmbH"
     assert data["total_amount"] == 500.0
+
+
+SAMPLE_CUSTOMER = {
+    "name": "Muster Immobilien GmbH",
+    "street": "Musterstraße 1",
+    "zip_code": "10719",
+    "city": "Berlin",
+    "email": "kontakt@muster-immobilien.de",
+    "phone": "030 1234567",
+}
+
+
+def test_customer_lifecycle(client):
+    created = client.post("/customers", json=SAMPLE_CUSTOMER)
+    assert created.status_code == 200
+    customer_id = created.json()["id"]
+
+    listed = client.get("/customers").json()
+    assert len(listed) == 1
+    assert listed[0]["name"] == "Muster Immobilien GmbH"
+
+    fetched = client.get(f"/customers/{customer_id}")
+    assert fetched.status_code == 200
+    assert fetched.json()["city"] == "Berlin"
+
+    updated = client.patch(
+        f"/customers/{customer_id}", json={**SAMPLE_CUSTOMER, "city": "Hamburg"}
+    )
+    assert updated.status_code == 200
+    assert updated.json()["city"] == "Hamburg"
+
+    deleted = client.delete(f"/customers/{customer_id}")
+    assert deleted.status_code == 200
+    assert client.get("/customers").json() == []
+
+
+def test_get_unknown_customer_returns_404(client):
+    response = client.get("/customers/999999")
+    assert response.status_code == 404
+
+
+def test_update_unknown_customer_returns_404(client):
+    response = client.patch("/customers/999999", json=SAMPLE_CUSTOMER)
+    assert response.status_code == 404
+
+
+def test_delete_unknown_customer_returns_404(client):
+    response = client.delete("/customers/999999")
+    assert response.status_code == 404
+
+
+def test_company_settings_defaults_to_empty(client):
+    response = client.get("/company-settings")
+    assert response.status_code == 200
+    assert response.json()["name"] is None
+
+
+def test_company_settings_save_and_retrieve(client):
+    settings = {
+        "name": "CIDE Concept GmbH",
+        "street": "Knesebeckstr. 62",
+        "zip_code": "10719",
+        "city": "Berlin",
+        "email": "info@cide-concept.de",
+        "phone": "030 1234567",
+        "tax_id": "DE123456789",
+        "bank_name": "Musterbank",
+        "bank_iban": "DE89370400440532013000",
+    }
+
+    saved = client.put("/company-settings", json=settings)
+    assert saved.status_code == 200
+    assert saved.json()["name"] == "CIDE Concept GmbH"
+
+    fetched = client.get("/company-settings")
+    assert fetched.json()["bank_iban"] == "DE89370400440532013000"
