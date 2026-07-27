@@ -14,6 +14,7 @@ _COLUMNS = [
     "tax_id",
     "bank_name",
     "bank_iban",
+    "default_payment_term_days",
 ]
 
 
@@ -32,7 +33,8 @@ def init_company_settings_table(db_path: Path | None = None) -> None:
                 phone TEXT,
                 tax_id TEXT,
                 bank_name TEXT,
-                bank_iban TEXT
+                bank_iban TEXT,
+                default_payment_term_days INTEGER
             )
             """
         )

@@ -1,4 +1,4 @@
-from app import customers_db, documents_db
+from app import company_settings, customers_db, documents_db
 
 SAMPLE_CUSTOMER = {
     "name": "Muster Immobilien GmbH",
@@ -19,6 +19,7 @@ def _setup(tmp_path):
     db_path = tmp_path / "test.db"
     customers_db.init_customers_table(db_path)
     documents_db.init_documents_tables(db_path)
+    company_settings.init_company_settings_table(db_path)
     customer_id = customers_db.create_customer(SAMPLE_CUSTOMER, db_path)
     return db_path, customer_id
 
@@ -130,3 +131,63 @@ def test_convert_non_angebot_returns_none(tmp_path):
 def test_convert_unknown_document_returns_none(tmp_path):
     db_path, _ = _setup(tmp_path)
     assert documents_db.convert_to_invoice(9999, db_path) is None
+
+
+def test_due_date_auto_computed_from_default_payment_term(tmp_path):
+    db_path, customer_id = _setup(tmp_path)
+    company_settings.save_company_settings(
+        {"default_payment_term_days": 14}, db_path
+    )
+
+    document_id = documents_db.create_document(
+        "rechnung",
+        customer_id,
+        SAMPLE_ITEMS,
+        issue_date="01.01.2026",
+        db_path=db_path,
+    )
+
+    assert documents_db.get_document(document_id, db_path)["due_date"] == "15.01.2026"
+
+
+def test_due_date_not_set_without_default_payment_term(tmp_path):
+    db_path, customer_id = _setup(tmp_path)
+
+    document_id = documents_db.create_document(
+        "rechnung", customer_id, SAMPLE_ITEMS, issue_date="01.01.2026", db_path=db_path
+    )
+
+    assert documents_db.get_document(document_id, db_path)["due_date"] is None
+
+
+def test_explicit_due_date_is_not_overridden(tmp_path):
+    db_path, customer_id = _setup(tmp_path)
+    company_settings.save_company_settings(
+        {"default_payment_term_days": 14}, db_path
+    )
+
+    document_id = documents_db.create_document(
+        "rechnung",
+        customer_id,
+        SAMPLE_ITEMS,
+        issue_date="01.01.2026",
+        due_date="28.02.2026",
+        db_path=db_path,
+    )
+
+    assert documents_db.get_document(document_id, db_path)["due_date"] == "28.02.2026"
+
+
+def test_converted_invoice_gets_auto_due_date(tmp_path):
+    db_path, customer_id = _setup(tmp_path)
+    company_settings.save_company_settings(
+        {"default_payment_term_days": 30}, db_path
+    )
+    angebot_id = documents_db.create_document(
+        "angebot", customer_id, SAMPLE_ITEMS, db_path=db_path
+    )
+
+    invoice_id = documents_db.convert_to_invoice(angebot_id, db_path)
+    invoice = documents_db.get_document(invoice_id, db_path)
+
+    assert invoice["due_date"] is not None

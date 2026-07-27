@@ -10,6 +10,7 @@ SAMPLE_SETTINGS = {
     "tax_id": "DE123456789",
     "bank_name": "Musterbank",
     "bank_iban": "DE89370400440532013000",
+    "default_payment_term_days": 14,
 }
 
 
@@ -31,6 +32,7 @@ def test_save_and_get_company_settings(tmp_path):
 
     assert settings["name"] == "CIDE Concept GmbH"
     assert settings["bank_iban"] == "DE89370400440532013000"
+    assert settings["default_payment_term_days"] == 14
 
 
 def test_save_company_settings_overwrites_existing(tmp_path):

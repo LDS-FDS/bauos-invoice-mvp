@@ -1,11 +1,25 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
+from app import company_settings
 from app.db import get_connection
 
 _ITEM_COLUMNS = ["description", "quantity", "unit", "unit_price", "tax_rate"]
+
+
+def _compute_default_due_date(issue_date: str, db_path: Path | None) -> str | None:
+    term_days = company_settings.get_company_settings(db_path).get(
+        "default_payment_term_days"
+    )
+    if not term_days:
+        return None
+    try:
+        parsed = datetime.strptime(issue_date, "%d.%m.%Y").date()
+    except (ValueError, TypeError):
+        return None
+    return (parsed + timedelta(days=int(term_days))).strftime("%d.%m.%Y")
 
 
 def init_documents_tables(db_path: Path | None = None) -> None:
@@ -87,6 +101,8 @@ def create_document(
         doc_number = _generate_doc_number(doc_type, conn)
         net_total, tax_total, gross_total = _compute_totals(items)
         issue_date = issue_date or date.today().strftime("%d.%m.%Y")
+        if doc_type == "rechnung" and due_date is None:
+            due_date = _compute_default_due_date(issue_date, db_path)
 
         cursor = conn.execute(
             """

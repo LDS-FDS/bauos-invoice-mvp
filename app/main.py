@@ -173,6 +173,7 @@ class CompanySettingsIn(BaseModel):
     tax_id: str | None = None
     bank_name: str | None = None
     bank_iban: str | None = None
+    default_payment_term_days: int | None = None
 
 
 @app.get("/company-settings")
