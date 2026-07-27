@@ -30,7 +30,7 @@
 
   main {
     width: 100%;
-    max-width: 760px;
+    max-width: 900px;
   }
 
   h1 {
@@ -181,11 +181,24 @@
     white-space: nowrap;
   }
 
-  .row-actions button {
+  .row-actions button,
+  .row-actions a {
     width: auto;
     margin-top: 0;
     padding: 6px 12px;
     font-size: 0.8rem;
+    text-decoration: none;
+    display: inline-block;
+  }
+
+  .row-actions select {
+    padding: 6px 8px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 0.8rem;
+    font-family: inherit;
+    background: var(--card);
+    color: var(--text);
   }
 
   .btn-secondary {
@@ -237,7 +250,9 @@
     margin-bottom: 4px;
   }
 
-  .form-grid input {
+  .form-grid input,
+  .form-grid select,
+  .form-grid textarea {
     padding: 10px 12px;
     border: 1px solid var(--border);
     border-radius: 8px;
@@ -247,12 +262,83 @@
     color: var(--text);
   }
 
-  .form-grid input:focus {
+  .form-grid input:focus,
+  .form-grid select:focus,
+  .form-grid textarea:focus {
     outline: none;
     border-color: var(--blue-dark);
   }
 
-  .form-grid input.span-2 { grid-column: 1 / -1; }
+  .form-grid input.span-2,
+  .form-grid select.span-2,
+  .form-grid textarea.span-2 { grid-column: 1 / -1; }
+
+  .item-row {
+    display: grid;
+    grid-template-columns: 3fr 1fr 1fr 1.3fr 1fr auto;
+    gap: 8px;
+    margin-bottom: 8px;
+    align-items: center;
+  }
+
+  .item-row input {
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 0.85rem;
+    font-family: inherit;
+    background: var(--card);
+    color: var(--text);
+    width: 100%;
+  }
+
+  .item-row input:focus {
+    outline: none;
+    border-color: var(--blue-dark);
+  }
+
+  .item-row-header {
+    display: grid;
+    grid-template-columns: 3fr 1fr 1fr 1.3fr 1fr auto;
+    gap: 8px;
+    margin-bottom: 6px;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    font-weight: 600;
+  }
+
+  .btn-remove-item {
+    width: auto;
+    margin-top: 0;
+    padding: 6px 10px;
+    font-size: 0.85rem;
+    background: transparent;
+    border: 1px solid #e0bdb4;
+    color: #b0554a;
+  }
+  .btn-remove-item:hover:not(:disabled) { background: #f7e6e0; }
+
+  .btn-add-item {
+    width: auto;
+    margin-top: 8px;
+    margin-bottom: 16px;
+    padding: 8px 14px;
+    font-size: 0.85rem;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text);
+  }
+  .btn-add-item:hover:not(:disabled) { background: var(--beige); }
+
+  .totals-box {
+    margin: 4px 0 16px;
+    padding: 12px 16px;
+    background: var(--beige);
+    border-radius: 10px;
+    font-size: 0.9rem;
+  }
+  .totals-box div { display: flex; justify-content: space-between; padding: 2px 0; }
+  .totals-box .grand { font-weight: 700; border-top: 1px solid var(--border); margin-top: 4px; padding-top: 6px; }
 </style>
 </head>
 <body>
@@ -264,6 +350,7 @@
     <button class="tab-btn active" data-tab="invoices">Rechnungen</button>
     <button class="tab-btn" data-tab="customers">Kunden</button>
     <button class="tab-btn" data-tab="settings">Firmendaten</button>
+    <button class="tab-btn" data-tab="documents">Angebote &amp; Rechnungen</button>
   </div>
 
   <div class="tab-panel" data-panel="invoices">
@@ -370,6 +457,66 @@
       </div>
       <button id="saveCompanyBtn">Speichern</button>
       <div id="companyStatus" class="status"></div>
+    </div>
+  </div>
+
+  <div class="tab-panel" data-panel="documents" style="display:none">
+    <div class="card">
+      <h2>Neues Angebot / Neue Rechnung</h2>
+      <div class="form-grid">
+        <select id="docType" class="span-2">
+          <option value="angebot">Angebot</option>
+          <option value="rechnung">Rechnung</option>
+        </select>
+        <select id="docCustomer" class="span-2">
+          <option value="">Kunde wählen...</option>
+        </select>
+        <div>
+          <label class="empty-hint" style="display:block; margin-bottom:4px;">Datum</label>
+          <input type="date" id="docIssueDate">
+        </div>
+        <div>
+          <label class="empty-hint" id="docValidDueLabel" style="display:block; margin-bottom:4px;">Gültig bis</label>
+          <input type="date" id="docValidDueDate">
+        </div>
+        <textarea id="docNotes" class="span-2" placeholder="Notizen (optional)" rows="2"></textarea>
+      </div>
+
+      <div class="item-row-header">
+        <span>Beschreibung</span><span>Menge</span><span>Einheit</span><span>Einzelpreis</span><span>MwSt%</span><span></span>
+      </div>
+      <div id="itemRows"></div>
+      <button type="button" class="btn-add-item" id="addItemRowBtn">+ Position hinzufügen</button>
+
+      <div class="totals-box">
+        <div><span>Netto-Summe</span><span id="docNetTotal">0,00 €</span></div>
+        <div><span>MwSt.</span><span id="docTaxTotal">0,00 €</span></div>
+        <div class="grand"><span>Gesamtbetrag</span><span id="docGrossTotal">0,00 €</span></div>
+      </div>
+
+      <button id="createDocumentBtn">Erstellen</button>
+      <div id="documentStatus" class="status"></div>
+    </div>
+
+    <div class="card">
+      <h2>Alle Angebote &amp; Rechnungen</h2>
+      <div id="documentListWrapper">
+        <p class="empty-hint" id="documentEmptyHint">Noch keine Angebote oder Rechnungen erstellt.</p>
+        <table id="documentTable" style="display:none">
+          <thead>
+            <tr>
+              <th>Nr.</th>
+              <th>Typ</th>
+              <th>Kunde</th>
+              <th>Datum</th>
+              <th>Betrag</th>
+              <th>Status</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="documentTableBody"></tbody>
+        </table>
+      </div>
     </div>
   </div>
 </main>
@@ -679,6 +826,208 @@
   });
 
   loadCompanySettings();
+
+  // --- Documents (Angebote & Rechnungen) ---
+  const docTypeSelect = document.getElementById("docType");
+  const docValidDueLabel = document.getElementById("docValidDueLabel");
+  const docValidDueInput = document.getElementById("docValidDueDate");
+  const itemRowsContainer = document.getElementById("itemRows");
+
+  function toGermanDate(isoDate) {
+    if (!isoDate) return null;
+    const [y, m, d] = isoDate.split("-");
+    return `${d}.${m}.${y}`;
+  }
+
+  function formatEuro(value) {
+    return `${value.toFixed(2).replace(".", ",")} €`;
+  }
+
+  function updateDueLabel() {
+    docValidDueLabel.textContent = docTypeSelect.value === "angebot" ? "Gültig bis" : "Zahlbar bis";
+  }
+  docTypeSelect.addEventListener("change", updateDueLabel);
+  updateDueLabel();
+
+  function readItems() {
+    return [...itemRowsContainer.querySelectorAll(".item-row")].map((row) => ({
+      description: row.querySelector(".item-desc").value.trim(),
+      quantity: parseFloat(row.querySelector(".item-qty").value) || 0,
+      unit: row.querySelector(".item-unit").value.trim() || null,
+      unit_price: parseFloat(row.querySelector(".item-price").value) || 0,
+      tax_rate: parseFloat(row.querySelector(".item-tax").value) || 0,
+    }));
+  }
+
+  function updateTotals() {
+    const items = readItems();
+    let net = 0;
+    let tax = 0;
+    for (const item of items) {
+      const lineNet = item.quantity * item.unit_price;
+      net += lineNet;
+      tax += lineNet * (item.tax_rate / 100);
+    }
+    document.getElementById("docNetTotal").textContent = formatEuro(net);
+    document.getElementById("docTaxTotal").textContent = formatEuro(tax);
+    document.getElementById("docGrossTotal").textContent = formatEuro(net + tax);
+  }
+
+  function addItemRow(values = {}) {
+    const row = document.createElement("div");
+    row.className = "item-row";
+    row.innerHTML = `
+      <input type="text" class="item-desc" placeholder="Beschreibung" value="${values.description || ""}">
+      <input type="number" class="item-qty" placeholder="1" step="0.01" value="${values.quantity ?? 1}">
+      <input type="text" class="item-unit" placeholder="Stk." value="${values.unit || ""}">
+      <input type="number" class="item-price" placeholder="0,00" step="0.01" value="${values.unit_price ?? ""}">
+      <input type="number" class="item-tax" placeholder="19" step="0.1" value="${values.tax_rate ?? 19}">
+      <button type="button" class="btn-remove-item">×</button>
+    `;
+    row.querySelector(".btn-remove-item").addEventListener("click", () => {
+      row.remove();
+      updateTotals();
+    });
+    row.querySelectorAll("input").forEach((input) => input.addEventListener("input", updateTotals));
+    itemRowsContainer.appendChild(row);
+    updateTotals();
+  }
+
+  document.getElementById("addItemRowBtn").addEventListener("click", () => addItemRow());
+
+  async function loadCustomersIntoDocumentForm() {
+    const response = await fetch("/customers");
+    const customers = await response.json();
+    const select = document.getElementById("docCustomer");
+    select.innerHTML =
+      '<option value="">Kunde wählen...</option>' +
+      customers.map((c) => `<option value="${c.id}">${c.name}</option>`).join("");
+  }
+
+  document.getElementById("createDocumentBtn").addEventListener("click", async () => {
+    const statusEl = document.getElementById("documentStatus");
+    const customerId = document.getElementById("docCustomer").value;
+    if (!customerId) {
+      statusEl.textContent = "Bitte einen Kunden auswählen.";
+      statusEl.className = "status error";
+      return;
+    }
+    const items = readItems().filter((i) => i.description);
+    if (items.length === 0) {
+      statusEl.textContent = "Bitte mindestens eine Position mit Beschreibung angeben.";
+      statusEl.className = "status error";
+      return;
+    }
+
+    const docType = docTypeSelect.value;
+    const payload = {
+      doc_type: docType,
+      customer_id: parseInt(customerId, 10),
+      issue_date: toGermanDate(document.getElementById("docIssueDate").value),
+      notes: document.getElementById("docNotes").value.trim() || null,
+      items,
+    };
+    const dueValue = toGermanDate(docValidDueInput.value);
+    if (docType === "angebot") payload.valid_until = dueValue;
+    else payload.due_date = dueValue;
+
+    const response = await fetch("/documents", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const detail = await response.json().catch(() => ({}));
+      statusEl.textContent = detail.detail || "Fehler beim Erstellen.";
+      statusEl.className = "status error";
+      return;
+    }
+
+    statusEl.textContent = "";
+    itemRowsContainer.innerHTML = "";
+    addItemRow();
+    document.getElementById("docNotes").value = "";
+    document.getElementById("docCustomer").value = "";
+    await loadDocuments();
+  });
+
+  const DOC_STATUS_OPTIONS = {
+    angebot: ["entwurf", "versendet", "angenommen", "abgelehnt"],
+    rechnung: ["entwurf", "versendet", "bezahlt"],
+  };
+
+  async function loadDocuments() {
+    const response = await fetch("/documents");
+    const documents = await response.json();
+
+    const table = document.getElementById("documentTable");
+    const emptyHint = document.getElementById("documentEmptyHint");
+    const tbody = document.getElementById("documentTableBody");
+    tbody.innerHTML = "";
+
+    if (documents.length === 0) {
+      table.style.display = "none";
+      emptyHint.style.display = "block";
+      return;
+    }
+    table.style.display = "table";
+    emptyHint.style.display = "none";
+
+    for (const doc of documents) {
+      const tr = document.createElement("tr");
+      const statusOptions = DOC_STATUS_OPTIONS[doc.doc_type] || [];
+      const optionsHtml = statusOptions
+        .map((s) => `<option value="${s}" ${s === doc.status ? "selected" : ""}>${s}</option>`)
+        .join("");
+      const convertBtn =
+        doc.doc_type === "angebot" && doc.status === "angenommen"
+          ? `<button class="btn-secondary" data-action="convert" data-id="${doc.id}">In Rechnung umwandeln</button>`
+          : "";
+
+      tr.innerHTML = `
+        <td>${doc.doc_number}</td>
+        <td>${doc.doc_type === "angebot" ? "Angebot" : "Rechnung"}</td>
+        <td>${doc.customer_name || "–"}</td>
+        <td>${doc.issue_date || "–"}</td>
+        <td>${formatEuro(doc.gross_total || 0)}</td>
+        <td><select data-id="${doc.id}" class="doc-status-select">${optionsHtml}</select></td>
+        <td class="row-actions">
+          <a class="btn-secondary" href="/documents/${doc.id}/pdf">PDF</a>
+          ${convertBtn}
+          <button class="btn-danger" data-action="delete" data-id="${doc.id}">Löschen</button>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    }
+  }
+
+  document.getElementById("documentTableBody").addEventListener("click", async (e) => {
+    const btn = e.target.closest("button");
+    if (!btn) return;
+    const id = btn.dataset.id;
+    if (btn.dataset.action === "delete") {
+      await fetch(`/documents/${id}`, { method: "DELETE" });
+      await loadDocuments();
+    } else if (btn.dataset.action === "convert") {
+      await fetch(`/documents/${id}/convert-to-invoice`, { method: "POST" });
+      await loadDocuments();
+    }
+  });
+
+  document.getElementById("documentTableBody").addEventListener("change", async (e) => {
+    if (!e.target.classList.contains("doc-status-select")) return;
+    await fetch(`/documents/${e.target.dataset.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: e.target.value }),
+    });
+    await loadDocuments();
+  });
+
+  addItemRow();
+  loadCustomersIntoDocumentForm();
+  loadDocuments();
 </script>
 </body>
 </html>

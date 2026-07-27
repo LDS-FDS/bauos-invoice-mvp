@@ -6,8 +6,9 @@ from fastapi import FastAPI, HTTPException, UploadFile
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 
-from app import company_settings, customers_db, db
+from app import company_settings, customers_db, db, documents_db
 from app.ai_invoice_extractor import extract_invoice_from_image, extract_invoice_with_ai
+from app.document_pdf import build_document_pdf
 from app.invoice_parser import parse_invoice_text
 from app.pdf_export import build_invoice_list_pdf
 
@@ -15,6 +16,7 @@ app = FastAPI(title="BauOS Invoice MVP")
 db.init_db()
 customers_db.init_customers_table()
 company_settings.init_company_settings_table()
+documents_db.init_documents_tables()
 
 
 @app.get("/")
@@ -181,3 +183,97 @@ def get_company_settings() -> dict:
 @app.put("/company-settings")
 def save_company_settings(settings: CompanySettingsIn) -> dict:
     return company_settings.save_company_settings(settings.model_dump())
+
+
+class DocumentItemIn(BaseModel):
+    description: str
+    quantity: float
+    unit: str | None = None
+    unit_price: float
+    tax_rate: float = 19.0
+
+
+class DocumentCreate(BaseModel):
+    doc_type: Literal["angebot", "rechnung"]
+    customer_id: int
+    issue_date: str | None = None
+    valid_until: str | None = None
+    due_date: str | None = None
+    notes: str | None = None
+    items: list[DocumentItemIn]
+
+
+class DocumentStatusUpdate(BaseModel):
+    status: Literal["entwurf", "versendet", "angenommen", "abgelehnt", "bezahlt"]
+
+
+@app.post("/documents")
+def create_document(payload: DocumentCreate) -> dict:
+    if customers_db.get_customer(payload.customer_id) is None:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    if not payload.items:
+        raise HTTPException(status_code=400, detail="At least one item is required")
+
+    document_id = documents_db.create_document(
+        doc_type=payload.doc_type,
+        customer_id=payload.customer_id,
+        items=[item.model_dump() for item in payload.items],
+        issue_date=payload.issue_date,
+        valid_until=payload.valid_until,
+        due_date=payload.due_date,
+        notes=payload.notes,
+    )
+    return documents_db.get_document(document_id)
+
+
+@app.get("/documents")
+def list_documents(doc_type: Literal["angebot", "rechnung"] | None = None) -> list[dict]:
+    return documents_db.list_documents(doc_type)
+
+
+@app.get("/documents/{document_id}")
+def get_document(document_id: int) -> dict:
+    document = documents_db.get_document(document_id)
+    if document is None:
+        raise HTTPException(status_code=404, detail="Document not found")
+    return document
+
+
+@app.patch("/documents/{document_id}")
+def update_document_status(document_id: int, body: DocumentStatusUpdate) -> dict:
+    if not documents_db.update_document_status(document_id, body.status):
+        raise HTTPException(status_code=404, detail="Document not found")
+    return documents_db.get_document(document_id)
+
+
+@app.delete("/documents/{document_id}")
+def delete_document(document_id: int) -> dict:
+    if not documents_db.delete_document(document_id):
+        raise HTTPException(status_code=404, detail="Document not found")
+    return {"deleted": document_id}
+
+
+@app.get("/documents/{document_id}/pdf")
+def document_pdf(document_id: int) -> Response:
+    document = documents_db.get_document(document_id)
+    if document is None:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    pdf_bytes = build_document_pdf(document, company_settings.get_company_settings())
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f"attachment; filename={document['doc_number']}.pdf"
+        },
+    )
+
+
+@app.post("/documents/{document_id}/convert-to-invoice")
+def convert_document_to_invoice(document_id: int) -> dict:
+    new_id = documents_db.convert_to_invoice(document_id)
+    if new_id is None:
+        raise HTTPException(
+            status_code=400, detail="Document not found or is not an Angebot"
+        )
+    return documents_db.get_document(new_id)
