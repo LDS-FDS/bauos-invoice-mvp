@@ -206,13 +206,67 @@
     color: var(--text-muted);
     font-size: 0.9rem;
   }
+
+  .tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 24px;
+    border-bottom: 2px solid var(--border);
+  }
+
+  .tab-btn {
+    width: auto;
+    margin-top: 0;
+    margin-bottom: -2px;
+    background: transparent;
+    color: var(--text-muted);
+    border: none;
+    border-radius: 0;
+    padding: 10px 16px;
+    font-weight: 600;
+    border-bottom: 3px solid transparent;
+  }
+
+  .tab-btn:hover:not(:disabled) { background: transparent; color: var(--text); }
+  .tab-btn.active { color: var(--blue-dark); border-bottom-color: var(--blue-dark); }
+
+  .form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 4px;
+  }
+
+  .form-grid input {
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-family: inherit;
+    background: var(--card);
+    color: var(--text);
+  }
+
+  .form-grid input:focus {
+    outline: none;
+    border-color: var(--blue-dark);
+  }
+
+  .form-grid input.span-2 { grid-column: 1 / -1; }
 </style>
 </head>
 <body>
 <main>
-  <h1>BauOS – Rechnungserkennung</h1>
-  <p class="subtitle">Rechnung hochladen und automatisch auslesen lassen.</p>
+  <h1>BauOS</h1>
+  <p class="subtitle">Rechnungserkennung, Kunden und Firmendaten.</p>
 
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="invoices">Rechnungen</button>
+    <button class="tab-btn" data-tab="customers">Kunden</button>
+    <button class="tab-btn" data-tab="settings">Firmendaten</button>
+  </div>
+
+  <div class="tab-panel" data-panel="invoices">
   <div class="card">
     <label class="dropzone" id="dropzone">
       <div id="dropzoneText">
@@ -260,6 +314,62 @@
         </thead>
         <tbody id="invoiceTableBody"></tbody>
       </table>
+    </div>
+  </div>
+  </div>
+
+  <div class="tab-panel" data-panel="customers" style="display:none">
+    <div class="card">
+      <h2>Neuer Kunde</h2>
+      <div class="form-grid">
+        <input type="text" id="custName" placeholder="Name / Firma *" class="span-2">
+        <input type="text" id="custStreet" placeholder="Straße" class="span-2">
+        <input type="text" id="custZip" placeholder="PLZ">
+        <input type="text" id="custCity" placeholder="Ort">
+        <input type="email" id="custEmail" placeholder="E-Mail">
+        <input type="text" id="custPhone" placeholder="Telefon">
+      </div>
+      <button id="addCustomerBtn">Kunde speichern</button>
+      <div id="customerStatus" class="status"></div>
+    </div>
+
+    <div class="card">
+      <h2>Kundenliste</h2>
+      <div id="customerListWrapper">
+        <p class="empty-hint" id="customerEmptyHint">Noch keine Kunden gespeichert.</p>
+        <table id="customerTable" style="display:none">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Ort</th>
+              <th>E-Mail</th>
+              <th>Telefon</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="customerTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="tab-panel" data-panel="settings" style="display:none">
+    <div class="card">
+      <h2>Firmendaten</h2>
+      <p class="empty-hint">Diese Angaben erscheinen später auf deinen Angeboten und Rechnungen.</p>
+      <div class="form-grid">
+        <input type="text" id="companyName" placeholder="Firmenname *" class="span-2">
+        <input type="text" id="companyStreet" placeholder="Straße" class="span-2">
+        <input type="text" id="companyZip" placeholder="PLZ">
+        <input type="text" id="companyCity" placeholder="Ort">
+        <input type="email" id="companyEmail" placeholder="E-Mail">
+        <input type="text" id="companyPhone" placeholder="Telefon">
+        <input type="text" id="companyTaxId" placeholder="USt-IdNr." class="span-2">
+        <input type="text" id="companyBankName" placeholder="Bank">
+        <input type="text" id="companyBankIban" placeholder="IBAN">
+      </div>
+      <button id="saveCompanyBtn">Speichern</button>
+      <div id="companyStatus" class="status"></div>
     </div>
   </div>
 </main>
@@ -440,6 +550,135 @@
   });
 
   loadInvoices();
+
+  // --- Tabs ---
+  document.querySelectorAll(".tab-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".tab-btn").forEach((b) => b.classList.remove("active"));
+      document.querySelectorAll(".tab-panel").forEach((p) => (p.style.display = "none"));
+      btn.classList.add("active");
+      document.querySelector(`.tab-panel[data-panel="${btn.dataset.tab}"]`).style.display = "block";
+    });
+  });
+
+  // --- Customers ---
+  async function loadCustomers() {
+    const response = await fetch("/customers");
+    const customers = await response.json();
+
+    const table = document.getElementById("customerTable");
+    const emptyHint = document.getElementById("customerEmptyHint");
+    const tbody = document.getElementById("customerTableBody");
+    tbody.innerHTML = "";
+
+    if (customers.length === 0) {
+      table.style.display = "none";
+      emptyHint.style.display = "block";
+      return;
+    }
+    table.style.display = "table";
+    emptyHint.style.display = "none";
+
+    for (const customer of customers) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${customer.name}</td>
+        <td>${customer.city || "–"}</td>
+        <td>${customer.email || "–"}</td>
+        <td>${customer.phone || "–"}</td>
+        <td class="row-actions">
+          <button class="btn-danger" data-id="${customer.id}">Löschen</button>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    }
+  }
+
+  document.getElementById("customerTableBody").addEventListener("click", async (e) => {
+    const btn = e.target.closest("button");
+    if (!btn) return;
+    await fetch(`/customers/${btn.dataset.id}`, { method: "DELETE" });
+    await loadCustomers();
+  });
+
+  document.getElementById("addCustomerBtn").addEventListener("click", async () => {
+    const statusEl = document.getElementById("customerStatus");
+    const name = document.getElementById("custName").value.trim();
+    if (!name) {
+      statusEl.textContent = "Bitte einen Namen angeben.";
+      statusEl.className = "status error";
+      return;
+    }
+
+    const payload = {
+      name,
+      street: document.getElementById("custStreet").value.trim() || null,
+      zip_code: document.getElementById("custZip").value.trim() || null,
+      city: document.getElementById("custCity").value.trim() || null,
+      email: document.getElementById("custEmail").value.trim() || null,
+      phone: document.getElementById("custPhone").value.trim() || null,
+    };
+
+    const response = await fetch("/customers", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      statusEl.textContent = "Fehler beim Speichern.";
+      statusEl.className = "status error";
+      return;
+    }
+
+    ["custName", "custStreet", "custZip", "custCity", "custEmail", "custPhone"].forEach(
+      (id) => (document.getElementById(id).value = "")
+    );
+    statusEl.textContent = "";
+    await loadCustomers();
+  });
+
+  loadCustomers();
+
+  // --- Company settings ---
+  const companyFieldMap = {
+    companyName: "name",
+    companyStreet: "street",
+    companyZip: "zip_code",
+    companyCity: "city",
+    companyEmail: "email",
+    companyPhone: "phone",
+    companyTaxId: "tax_id",
+    companyBankName: "bank_name",
+    companyBankIban: "bank_iban",
+  };
+
+  async function loadCompanySettings() {
+    const response = await fetch("/company-settings");
+    const settings = await response.json();
+    for (const [elementId, field] of Object.entries(companyFieldMap)) {
+      document.getElementById(elementId).value = settings[field] || "";
+    }
+  }
+
+  document.getElementById("saveCompanyBtn").addEventListener("click", async () => {
+    const statusEl = document.getElementById("companyStatus");
+    const payload = {};
+    for (const [elementId, field] of Object.entries(companyFieldMap)) {
+      payload[field] = document.getElementById(elementId).value.trim() || null;
+    }
+
+    const response = await fetch("/company-settings", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    statusEl.textContent = response.ok ? "Gespeichert." : "Fehler beim Speichern.";
+    statusEl.className = response.ok ? "status" : "status error";
+  });
+
+  loadCompanySettings();
 </script>
 </body>
 </html>
