@@ -62,3 +62,75 @@ def test_missing_fields_are_none():
     assert result.due_date is None
     assert result.skonto_percent is None
     assert result.bank_account is None
+
+
+# Real invoices don't always label the supplier clearly, put the amount in a
+# separate table row, or use a "." thousands separator. These regressions
+# cover formats found in practice.
+
+CUSTOMER_BLOCK_INVOICE = """
+Rechnung 998877
+Firma
+Kunde Beispiel GmbH
+Musterstraße 1
+10719 Berlin
+
+Sachbearbeiter: Max Beispiel
+Telefon: +49 30 1234567 Email: buchhaltung@beispiel-baustoffe.de
+
+Pos Artikel Menge Einheit Preis Gesamt EUR
+Pos. 1: Testartikel
+
+Rechnungsbetrag skontofähiger Betrag Netto MwSt-% MwSt Endbetrag EUR
+100,00 84,03 19,00 15,97 100,00
+
+Zahlbetrag mit 3,00% Skonto bis 05.08.2026 : 97,00
+Zahlbar bis 20.08.2026 ohne Abzug : 100,00
+"""
+
+
+def test_supplier_does_not_pick_up_customer_name():
+    result = parse_invoice_text(CUSTOMER_BLOCK_INVOICE)
+    assert result.supplier != "Kunde Beispiel GmbH"
+
+
+def test_supplier_falls_back_to_email_domain():
+    result = parse_invoice_text(CUSTOMER_BLOCK_INVOICE)
+    assert result.supplier == "Beispiel Baustoffe"
+
+
+def test_invoice_number_from_bare_rechnung_line():
+    result = parse_invoice_text(CUSTOMER_BLOCK_INVOICE)
+    assert result.invoice_number == "998877"
+
+
+def test_amount_from_endbetrag_table_row():
+    result = parse_invoice_text(CUSTOMER_BLOCK_INVOICE)
+    assert result.total_amount == 100.00
+    assert result.currency == "EUR"
+
+
+def test_amount_with_space_thousands_separator():
+    text = "Rechnungsbetrag..: 3 477,70 EUR"
+    result = parse_invoice_text(text)
+    assert result.total_amount == 3477.70
+
+
+def test_invoice_number_and_date_from_rechnung_vom_pattern():
+    text = "Kunden-Nr. 123, Rechnung 555444 vom 12.03.2026 Rechnungsbetrag 50,00 EUR"
+    result = parse_invoice_text(text)
+    assert result.invoice_number == "555444"
+    assert result.invoice_date == "12.03.2026"
+
+
+def test_skonto_date_falls_back_to_lastschrift_date():
+    text = "2,0 % Skonto belasten wir Ihr Konto durch Lastschrift am 07.05.2026."
+    result = parse_invoice_text(text)
+    assert result.skonto_percent == 2.0
+    assert result.skonto_date == "07.05.2026"
+
+
+def test_bank_account_without_label_nearby():
+    text = "Sparkasse Beispiel BIC: ABCDDE00 DE11 4005 0150 0095 0003 03 UST-IdNr.: DE123456789"
+    result = parse_invoice_text(text)
+    assert result.bank_account == "DE11400501500095000303"
