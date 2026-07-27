@@ -8,7 +8,7 @@ _LEGAL_FORM_RE = re.compile(
 )
 
 _INVOICE_NUMBER_LABELED_RE = re.compile(
-    r"Rechnung(?:s?nummer|\s*Nr\.?)\s*[:.]?\s*([A-Za-z0-9\-/]+)",
+    r"(?:Rechnung(?:s?nummer|\s*Nr\.?)|Beleg-?\s*Nr\.?)\s*[:.]?\s*([A-Za-z0-9\-/]+)",
     re.IGNORECASE,
 )
 
@@ -72,6 +72,11 @@ _BANK_NAME_RE = re.compile(
 )
 
 _AMOUNT_TOKEN_RE = re.compile(r"^\d[\d.]*,\d{2}$")
+
+_AMOUNT_GEGEBEN_RE = re.compile(
+    r"Gegeben\s*:?\s*(?:[A-Za-zÄÖÜäöüß\-]+\s+)?(\d[\d. ]*,\d{2})\s*(EUR|€)?",
+    re.IGNORECASE,
+)
 
 _CUSTOMER_LABELS = {"firma", "kunde", "kundenname", "empfänger", "rechnungsadresse", "lieferadresse"}
 _DOC_TITLE_WORDS = {"rechnung", "angebot", "lieferschein", "beleg", "auftrag", "auftragsbestätigung"}
@@ -210,6 +215,10 @@ def parse_invoice_text(text: str) -> InvoiceData:
         currency = match.group(2) or "EUR"
     if total_amount is None:
         total_amount, currency = _extract_amount_from_endbetrag_table(lines)
+    if total_amount is None:
+        if match := _AMOUNT_GEGEBEN_RE.search(text):
+            total_amount = _parse_german_amount(match.group(1))
+            currency = match.group(2) or "EUR"
 
     due_date = None
     if match := _DUE_DATE_RE.search(text):
