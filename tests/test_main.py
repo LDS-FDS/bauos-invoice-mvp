@@ -1,7 +1,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from app import company_settings, customers_db, db, documents_db
+from app import company_settings, customers_db, db, documents_db, projects_db
 from app import main as main_module
 from app.ai_invoice_extractor import AIInvoiceData
 from app.invoice_parser import InvoiceData
@@ -28,6 +28,7 @@ def client(tmp_path, monkeypatch):
     db.init_db()
     customers_db.init_customers_table()
     company_settings.init_company_settings_table()
+    projects_db.init_projects_table()
     documents_db.init_documents_tables()
     return TestClient(app)
 
@@ -354,3 +355,137 @@ def test_convert_invoice_returns_400(client):
     response = client.post(f"/documents/{rechnung['id']}/convert-to-invoice")
 
     assert response.status_code == 400
+
+
+SAMPLE_PROJECT = {
+    "name": "Sanierung Musterstraße 5",
+    "street": "Musterstraße 5",
+    "zip_code": "10719",
+    "city": "Berlin",
+    "status": "aktiv",
+}
+
+
+def test_project_lifecycle(client):
+    created = client.post("/projects", json=SAMPLE_PROJECT)
+    assert created.status_code == 200
+    project_id = created.json()["id"]
+    assert created.json()["status"] == "aktiv"
+
+    listed = client.get("/projects").json()
+    assert len(listed) == 1
+
+    fetched = client.get(f"/projects/{project_id}")
+    assert fetched.status_code == 200
+
+    updated = client.patch(
+        f"/projects/{project_id}", json={**SAMPLE_PROJECT, "status": "abgeschlossen"}
+    )
+    assert updated.status_code == 200
+    assert updated.json()["status"] == "abgeschlossen"
+
+    deleted = client.delete(f"/projects/{project_id}")
+    assert deleted.status_code == 200
+    assert client.get("/projects").json() == []
+
+
+def test_get_unknown_project_returns_404(client):
+    assert client.get("/projects/9999").status_code == 404
+
+
+def test_create_project_with_unknown_customer_returns_404(client):
+    response = client.post("/projects", json={**SAMPLE_PROJECT, "customer_id": 9999})
+    assert response.status_code == 404
+
+
+def test_update_unknown_project_returns_404(client):
+    response = client.patch("/projects/9999", json=SAMPLE_PROJECT)
+    assert response.status_code == 404
+
+
+def test_delete_unknown_project_returns_404(client):
+    assert client.delete("/projects/9999").status_code == 404
+
+
+def test_assign_invoice_to_project(client):
+    project_id = client.post("/projects", json=SAMPLE_PROJECT).json()["id"]
+    invoice_id = db.save_invoice(SAMPLE_INVOICE)
+
+    response = client.put(f"/invoices/{invoice_id}/project", json={"project_id": project_id})
+    assert response.status_code == 200
+    assert response.json()["project_id"] == project_id
+
+    filtered = client.get(f"/invoices?project_id={project_id}").json()
+    assert len(filtered) == 1
+
+
+def test_assign_invoice_to_unknown_project_returns_404(client):
+    invoice_id = db.save_invoice(SAMPLE_INVOICE)
+    response = client.put(f"/invoices/{invoice_id}/project", json={"project_id": 9999})
+    assert response.status_code == 404
+
+
+def test_assign_project_to_unknown_invoice_returns_404(client):
+    project_id = client.post("/projects", json=SAMPLE_PROJECT).json()["id"]
+    response = client.put("/invoices/9999/project", json={"project_id": project_id})
+    assert response.status_code == 404
+
+
+def test_create_document_with_unknown_project_returns_404(client):
+    customer_id = _create_customer(client)
+    response = client.post(
+        "/documents",
+        json={
+            "doc_type": "angebot",
+            "customer_id": customer_id,
+            "items": SAMPLE_ITEMS,
+            "project_id": 9999,
+        },
+    )
+    assert response.status_code == 404
+
+
+def test_assign_document_to_project(client):
+    customer_id = _create_customer(client)
+    project_id = client.post("/projects", json=SAMPLE_PROJECT).json()["id"]
+    document = client.post(
+        "/documents",
+        json={"doc_type": "angebot", "customer_id": customer_id, "items": SAMPLE_ITEMS},
+    ).json()
+
+    response = client.put(f"/documents/{document['id']}/project", json={"project_id": project_id})
+    assert response.status_code == 200
+    assert response.json()["project_id"] == project_id
+
+    filtered = client.get(f"/documents?project_id={project_id}").json()
+    assert len(filtered) == 1
+
+
+def test_project_summary(client):
+    customer_id = _create_customer(client)
+    project_id = client.post("/projects", json=SAMPLE_PROJECT).json()["id"]
+
+    invoice_id = db.save_invoice({**SAMPLE_INVOICE, "total_amount": 100.0})
+    client.put(f"/invoices/{invoice_id}/project", json={"project_id": project_id})
+
+    document = client.post(
+        "/documents",
+        json={
+            "doc_type": "rechnung",
+            "customer_id": customer_id,
+            "items": SAMPLE_ITEMS,
+            "project_id": project_id,
+        },
+    ).json()
+
+    summary = client.get(f"/projects/{project_id}/summary")
+    assert summary.status_code == 200
+    data = summary.json()
+    assert data["costs"] == 100.0
+    assert data["revenue"] == document["gross_total"]
+    assert len(data["invoices"]) == 1
+    assert len(data["documents"]) == 1
+
+
+def test_project_summary_unknown_project_returns_404(client):
+    assert client.get("/projects/9999/summary").status_code == 404

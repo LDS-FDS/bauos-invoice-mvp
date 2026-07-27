@@ -1,4 +1,4 @@
-from app import company_settings, customers_db, documents_db
+from app import company_settings, customers_db, documents_db, projects_db
 
 SAMPLE_CUSTOMER = {
     "name": "Muster Immobilien GmbH",
@@ -20,6 +20,7 @@ def _setup(tmp_path):
     customers_db.init_customers_table(db_path)
     documents_db.init_documents_tables(db_path)
     company_settings.init_company_settings_table(db_path)
+    projects_db.init_projects_table(db_path)
     customer_id = customers_db.create_customer(SAMPLE_CUSTOMER, db_path)
     return db_path, customer_id
 
@@ -67,8 +68,8 @@ def test_list_documents_filters_by_type(tmp_path):
     documents_db.create_document("angebot", customer_id, SAMPLE_ITEMS, db_path=db_path)
     documents_db.create_document("rechnung", customer_id, SAMPLE_ITEMS, db_path=db_path)
 
-    angebote = documents_db.list_documents("angebot", db_path)
-    rechnungen = documents_db.list_documents("rechnung", db_path)
+    angebote = documents_db.list_documents("angebot", db_path=db_path)
+    rechnungen = documents_db.list_documents("rechnung", db_path=db_path)
     all_docs = documents_db.list_documents(db_path=db_path)
 
     assert len(angebote) == 1
@@ -191,3 +192,54 @@ def test_converted_invoice_gets_auto_due_date(tmp_path):
     invoice = documents_db.get_document(invoice_id, db_path)
 
     assert invoice["due_date"] is not None
+
+
+def test_create_document_with_project(tmp_path):
+    db_path, customer_id = _setup(tmp_path)
+    project_id = projects_db.create_project({"name": "Testprojekt"}, db_path)
+
+    document_id = documents_db.create_document(
+        "angebot", customer_id, SAMPLE_ITEMS, project_id=project_id, db_path=db_path
+    )
+
+    document = documents_db.get_document(document_id, db_path)
+    assert document["project_id"] == project_id
+
+
+def test_list_documents_filters_by_project(tmp_path):
+    db_path, customer_id = _setup(tmp_path)
+    project_id = projects_db.create_project({"name": "Testprojekt"}, db_path)
+    documents_db.create_document(
+        "angebot", customer_id, SAMPLE_ITEMS, project_id=project_id, db_path=db_path
+    )
+    documents_db.create_document("rechnung", customer_id, SAMPLE_ITEMS, db_path=db_path)
+
+    filtered = documents_db.list_documents(project_id=project_id, db_path=db_path)
+
+    assert len(filtered) == 1
+    assert filtered[0]["project_name"] == "Testprojekt"
+
+
+def test_assign_document_project(tmp_path):
+    db_path, customer_id = _setup(tmp_path)
+    project_id = projects_db.create_project({"name": "Testprojekt"}, db_path)
+    document_id = documents_db.create_document(
+        "angebot", customer_id, SAMPLE_ITEMS, db_path=db_path
+    )
+
+    updated = documents_db.assign_document_project(document_id, project_id, db_path)
+
+    assert updated is True
+    assert documents_db.get_document(document_id, db_path)["project_id"] == project_id
+
+
+def test_converted_invoice_inherits_project(tmp_path):
+    db_path, customer_id = _setup(tmp_path)
+    project_id = projects_db.create_project({"name": "Testprojekt"}, db_path)
+    angebot_id = documents_db.create_document(
+        "angebot", customer_id, SAMPLE_ITEMS, project_id=project_id, db_path=db_path
+    )
+
+    invoice_id = documents_db.convert_to_invoice(angebot_id, db_path)
+
+    assert documents_db.get_document(invoice_id, db_path)["project_id"] == project_id

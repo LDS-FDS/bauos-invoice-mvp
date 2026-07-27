@@ -45,6 +45,13 @@ def init_documents_tables(db_path: Path | None = None) -> None:
             )
             """
         )
+        existing_columns = [
+            row[1] for row in conn.execute("PRAGMA table_info(documents)").fetchall()
+        ]
+        if "project_id" not in existing_columns:
+            conn.execute(
+                "ALTER TABLE documents ADD COLUMN project_id INTEGER REFERENCES projects(id)"
+            )
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS document_items (
@@ -94,6 +101,7 @@ def create_document(
     due_date: str | None = None,
     notes: str | None = None,
     converted_from_id: int | None = None,
+    project_id: int | None = None,
     db_path: Path | None = None,
 ) -> int:
     conn = get_connection(db_path)
@@ -108,13 +116,13 @@ def create_document(
             """
             INSERT INTO documents (
                 doc_type, doc_number, customer_id, issue_date, valid_until,
-                due_date, status, notes, converted_from_id,
+                due_date, status, notes, converted_from_id, project_id,
                 net_total, tax_total, gross_total
-            ) VALUES (?, ?, ?, ?, ?, ?, 'entwurf', ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, 'entwurf', ?, ?, ?, ?, ?, ?)
             """,
             (
                 doc_type, doc_number, customer_id, issue_date, valid_until,
-                due_date, notes, converted_from_id,
+                due_date, notes, converted_from_id, project_id,
                 net_total, tax_total, gross_total,
             ),
         )
@@ -143,21 +151,46 @@ def create_document(
         conn.close()
 
 
-def list_documents(doc_type: str | None = None, db_path: Path | None = None) -> list[dict]:
+def list_documents(
+    doc_type: str | None = None,
+    project_id: int | None = None,
+    db_path: Path | None = None,
+) -> list[dict]:
     conn = get_connection(db_path)
     try:
         query = """
-            SELECT documents.*, customers.name AS customer_name
+            SELECT documents.*, customers.name AS customer_name, projects.name AS project_name
             FROM documents
             LEFT JOIN customers ON customers.id = documents.customer_id
+            LEFT JOIN projects ON projects.id = documents.project_id
         """
-        params: tuple = ()
+        conditions = []
+        params: list = []
         if doc_type:
-            query += " WHERE documents.doc_type = ?"
-            params = (doc_type,)
+            conditions.append("documents.doc_type = ?")
+            params.append(doc_type)
+        if project_id is not None:
+            conditions.append("documents.project_id = ?")
+            params.append(project_id)
+        if conditions:
+            query += " WHERE " + " AND ".join(conditions)
         query += " ORDER BY documents.id DESC"
         rows = conn.execute(query, params).fetchall()
         return [dict(row) for row in rows]
+    finally:
+        conn.close()
+
+
+def assign_document_project(
+    document_id: int, project_id: int | None, db_path: Path | None = None
+) -> bool:
+    conn = get_connection(db_path)
+    try:
+        cursor = conn.execute(
+            "UPDATE documents SET project_id = ? WHERE id = ?", (project_id, document_id)
+        )
+        conn.commit()
+        return cursor.rowcount > 0
     finally:
         conn.close()
 
@@ -229,5 +262,6 @@ def convert_to_invoice(angebot_id: int, db_path: Path | None = None) -> int | No
         items=items,
         notes=angebot["notes"],
         converted_from_id=angebot_id,
+        project_id=angebot.get("project_id"),
         db_path=db_path,
     )

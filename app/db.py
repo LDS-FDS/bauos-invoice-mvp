@@ -30,6 +30,12 @@ def get_connection(db_path: Path | None = None) -> sqlite3.Connection:
     return conn
 
 
+def _add_column_if_missing(conn: sqlite3.Connection, table: str, column: str, coltype: str) -> None:
+    existing = [row[1] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()]
+    if column not in existing:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {coltype}")
+
+
 def init_db(db_path: Path | None = None) -> None:
     conn = get_connection(db_path)
     try:
@@ -53,6 +59,7 @@ def init_db(db_path: Path | None = None) -> None:
             )
             """
         )
+        _add_column_if_missing(conn, "invoices", "project_id", "INTEGER REFERENCES projects(id)")
         conn.commit()
     finally:
         conn.close()
@@ -73,11 +80,35 @@ def save_invoice(data: dict, db_path: Path | None = None) -> int:
         conn.close()
 
 
-def list_invoices(db_path: Path | None = None) -> list[dict]:
+def list_invoices(project_id: int | None = None, db_path: Path | None = None) -> list[dict]:
     conn = get_connection(db_path)
     try:
-        rows = conn.execute("SELECT * FROM invoices ORDER BY id DESC").fetchall()
+        query = """
+            SELECT invoices.*, projects.name AS project_name
+            FROM invoices
+            LEFT JOIN projects ON projects.id = invoices.project_id
+        """
+        params: tuple = ()
+        if project_id is not None:
+            query += " WHERE invoices.project_id = ?"
+            params = (project_id,)
+        query += " ORDER BY invoices.id DESC"
+        rows = conn.execute(query, params).fetchall()
         return [dict(row) for row in rows]
+    finally:
+        conn.close()
+
+
+def assign_invoice_project(
+    invoice_id: int, project_id: int | None, db_path: Path | None = None
+) -> bool:
+    conn = get_connection(db_path)
+    try:
+        cursor = conn.execute(
+            "UPDATE invoices SET project_id = ? WHERE id = ?", (project_id, invoice_id)
+        )
+        conn.commit()
+        return cursor.rowcount > 0
     finally:
         conn.close()
 
