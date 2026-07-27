@@ -38,8 +38,19 @@ _DUE_DATE_RE = re.compile(
     re.IGNORECASE,
 )
 
+_DUE_DATE_OHNE_ABZUG_RE = re.compile(
+    r"Bis\s+zum\s+(\d{1,2}\.\d{1,2}\.\d{2,4})\s+ohne\s+Abzug",
+    re.IGNORECASE,
+)
+
 _SKONTO_RE = re.compile(
     r"(\d{1,2}(?:,\d+)?)\s*%\s*Skonto(?:[^\d\n]{0,30}(\d{1,2}\.\d{1,2}\.\d{2,4}))?",
+    re.IGNORECASE,
+)
+
+_SKONTO_BIS_ZUM_RE = re.compile(
+    r"Bis\s+zum\s+(\d{1,2}\.\d{1,2}\.\d{2,4})\s+erhalten\s+Sie\s+(\d{1,3}(?:,\d+)?)\s*%\s*Skonto"
+    r"(?:[^\d\n]{0,20}(\d[\d. ]*,\d{2}))?",
     re.IGNORECASE,
 )
 
@@ -54,6 +65,11 @@ _IBAN_LABELED_RE = re.compile(
 )
 
 _IBAN_BARE_RE = re.compile(r"\bDE\d{2}(?:\s?\d{4}){4}\s?\d{2}\b")
+
+_BANK_NAME_RE = re.compile(
+    r"\b((?:\w*bank\b|sparkasse\b)(?:\s+[A-ZÄÖÜ&][\wÄÖÜäöüß.]*){0,2})",
+    re.IGNORECASE,
+)
 
 _AMOUNT_TOKEN_RE = re.compile(r"^\d[\d.]*,\d{2}$")
 
@@ -77,7 +93,9 @@ class InvoiceData:
     due_date: str | None
     skonto_percent: float | None
     skonto_date: str | None
+    skonto_amount: float | None
     bank_account: str | None
+    bank_name: str | None
 
 
 def _parse_german_amount(raw: str) -> float:
@@ -142,6 +160,21 @@ def _extract_amount_from_endbetrag_table(lines: list[str]) -> tuple[float | None
     return None, None
 
 
+def _extract_bank_name(lines: list[str], bank_account: str | None) -> str | None:
+    if bank_account is None:
+        return None
+    for i, line in enumerate(lines):
+        cleaned = re.sub(r"\s+", "", line).upper()
+        if bank_account in cleaned:
+            # The bank name isn't always on the same line as the IBAN (e.g.
+            # "Bankverbindung: Commerzbank AG" on the line above) - check a
+            # small window ending at the IBAN's own line, closest match first.
+            for candidate_line in reversed(lines[max(0, i - 2) : i + 1]):
+                if match := _BANK_NAME_RE.search(candidate_line):
+                    return match.group(1).strip()
+    return None
+
+
 def _extract_invoice_number_and_date(text: str) -> tuple[str | None, str | None]:
     invoice_number = None
     invoice_date = None
@@ -181,10 +214,19 @@ def parse_invoice_text(text: str) -> InvoiceData:
     due_date = None
     if match := _DUE_DATE_RE.search(text):
         due_date = match.group(1)
+    if due_date is None:
+        if match := _DUE_DATE_OHNE_ABZUG_RE.search(text):
+            due_date = match.group(1)
 
     skonto_percent = None
     skonto_date = None
-    if match := _SKONTO_RE.search(text):
+    skonto_amount = None
+    if match := _SKONTO_BIS_ZUM_RE.search(text):
+        skonto_date = match.group(1)
+        skonto_percent = float(match.group(2).replace(",", "."))
+        if match.group(3):
+            skonto_amount = _parse_german_amount(match.group(3))
+    elif match := _SKONTO_RE.search(text):
         skonto_percent = float(match.group(1).replace(",", "."))
         skonto_date = match.group(2)
 
@@ -198,6 +240,8 @@ def parse_invoice_text(text: str) -> InvoiceData:
     elif match := _IBAN_BARE_RE.search(text):
         bank_account = match.group(0).replace(" ", "").upper()
 
+    bank_name = _extract_bank_name(lines, bank_account)
+
     return InvoiceData(
         supplier=supplier,
         invoice_number=invoice_number,
@@ -207,5 +251,7 @@ def parse_invoice_text(text: str) -> InvoiceData:
         due_date=due_date,
         skonto_percent=skonto_percent,
         skonto_date=skonto_date,
+        skonto_amount=skonto_amount,
         bank_account=bank_account,
+        bank_name=bank_name,
     )

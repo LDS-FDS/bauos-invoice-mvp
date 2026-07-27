@@ -28,9 +28,24 @@ INVOICE_SCHEMA = {
             "type": ["string", "null"],
             "description": "Format DD.MM.YYYY - the earlier due date if Skonto is paid within it",
         },
+        "skonto_amount": {
+            "type": ["number", "null"],
+            "description": (
+                "The exact amount to pay if Skonto is used, ONLY if the invoice "
+                "literally states this amount (e.g. 'Zahlbetrag: 3,78 EUR'). Do "
+                "not compute this yourself from total_amount and skonto_percent - "
+                "Skonto often only applies to the net goods value, not VAT, so a "
+                "naive percentage calculation is usually wrong. Leave null if the "
+                "invoice doesn't state the discounted amount directly."
+            ),
+        },
         "bank_account": {
             "type": ["string", "null"],
             "description": "IBAN or other bank account identifier the invoice should be paid to",
+        },
+        "bank_name": {
+            "type": ["string", "null"],
+            "description": "Name of the bank the account is held at, if stated",
         },
     },
     "required": [
@@ -42,7 +57,9 @@ INVOICE_SCHEMA = {
         "due_date",
         "skonto_percent",
         "skonto_date",
+        "skonto_amount",
         "bank_account",
+        "bank_name",
     ],
     "additionalProperties": False,
 }
@@ -52,8 +69,8 @@ SYSTEM_PROMPT = (
     "including ones with unusual layout or wording that a regex parser would miss. "
     "Read the raw invoice text and extract: supplier name, invoice number, invoice date, "
     "total amount, currency, payment due date, and Skonto (early-payment discount) "
-    "percent/date, plus the bank account (IBAN) the invoice should be paid to. "
-    "Use null for anything not stated in the text. "
+    "percent/date, plus the bank account (IBAN) and bank name the invoice should be "
+    "paid to. Use null for anything not stated in the text. "
     "Never guess or infer a value that isn't actually written in the invoice."
 )
 
@@ -62,9 +79,9 @@ IMAGE_SYSTEM_PROMPT = (
     "construction-industry invoice image. Read the image and extract: supplier "
     "name, invoice number, invoice date, total amount, currency, payment due "
     "date, and Skonto (early-payment discount) percent/date, plus the bank "
-    "account (IBAN) the invoice should be paid to. Use null for anything not "
-    "visible or legible in the image. Never guess or infer a value that isn't "
-    "actually shown."
+    "account (IBAN) and bank name the invoice should be paid to. Use null for "
+    "anything not visible or legible in the image. Never guess or infer a "
+    "value that isn't actually shown."
 )
 
 
@@ -82,7 +99,9 @@ class AIInvoiceData:
     due_date: str | None
     skonto_percent: float | None
     skonto_date: str | None
+    skonto_amount: float | None
     bank_account: str | None
+    bank_name: str | None
 
 
 def extract_invoice_with_ai(

@@ -121,7 +121,23 @@
   h2 {
     font-size: 1.1rem;
     font-weight: 600;
-    margin: 0 0 16px;
+    margin: 0;
+  }
+
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+  }
+
+  .btn-export {
+    width: auto;
+    margin-top: 0;
+    padding: 8px 14px;
+    font-size: 0.85rem;
+    text-decoration: none;
+    display: inline-block;
   }
 
   table {
@@ -219,11 +235,15 @@
     <div class="result-row"><span class="result-label">Skonto</span><span class="result-value" id="r-skonto">–</span></div>
     <div class="result-row"><span class="result-label">Rechnungsbetrag mit Skonto</span><span class="result-value" id="r-amount-skonto">–</span></div>
     <div class="result-row"><span class="result-label">Zahlbar bis mit Skonto</span><span class="result-value" id="r-due-skonto">–</span></div>
-    <div class="result-row"><span class="result-label">Konto</span><span class="result-value" id="r-account">–</span></div>
+    <div class="result-row"><span class="result-label">IBAN</span><span class="result-value" id="r-account">–</span></div>
+    <div class="result-row"><span class="result-label">Bank</span><span class="result-value" id="r-bank">–</span></div>
   </div>
 
   <div class="card">
-    <h2>Alle Rechnungen</h2>
+    <div class="card-header">
+      <h2>Alle Rechnungen</h2>
+      <a class="btn-secondary btn-export" href="/invoices/export/pdf">PDF exportieren</a>
+    </div>
     <div id="invoiceListWrapper">
       <p class="empty-hint" id="emptyHint">Noch keine Rechnungen gespeichert.</p>
       <table id="invoiceTable" style="display:none">
@@ -313,6 +333,7 @@
           : "–";
       document.getElementById("r-due-skonto").textContent = formatValue(data.skonto_date);
       document.getElementById("r-account").textContent = formatValue(data.bank_account);
+      document.getElementById("r-bank").textContent = formatValue(data.bank_name);
 
       resultCard.style.display = "block";
       statusEl.textContent = "";

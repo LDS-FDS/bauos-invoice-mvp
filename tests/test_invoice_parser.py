@@ -56,6 +56,11 @@ def test_extracts_bank_account():
     assert result.bank_account == "DE89370400440532013000"
 
 
+def test_bank_name_is_none_when_not_stated():
+    result = parse_invoice_text(SAMPLE_INVOICE)
+    assert result.bank_name is None
+
+
 def test_missing_fields_are_none():
     result = parse_invoice_text("Ein Text ganz ohne Rechnungsdaten.")
     assert result.total_amount is None
@@ -131,6 +136,52 @@ def test_skonto_date_falls_back_to_lastschrift_date():
 
 
 def test_bank_account_without_label_nearby():
-    text = "Sparkasse Beispiel BIC: ABCDDE00 DE11 4005 0150 0095 0003 03 UST-IdNr.: DE123456789"
+    text = "Sparkasse Beispiel, BIC: ABCDDE00 DE11 4005 0150 0095 0003 03 UST-IdNr.: DE123456789"
     result = parse_invoice_text(text)
     assert result.bank_account == "DE11400501500095000303"
+    assert result.bank_name == "Sparkasse Beispiel"
+
+
+def test_bank_name_from_labeled_iban_line():
+    text = "AKTIVBANK AG, Musterstr. 1, 12345 Musterstadt, IBAN: DE37 6003 0700 0460 0620 00, BIC: AKBADES1"
+    result = parse_invoice_text(text)
+    assert result.bank_account == "DE37600307000460062000"
+    assert result.bank_name == "AKTIVBANK AG"
+
+
+def test_bank_name_is_none_without_bank_account():
+    result = parse_invoice_text("Ein Text ganz ohne Rechnungsdaten.")
+    assert result.bank_name is None
+
+
+def test_bank_name_found_on_line_above_iban():
+    text = (
+        "Bankverbindung: Commerzbank AG, Musterstadt\n"
+        "IBAN DE88 8108 0000 0313 9347 00 · BIC ABCDDEFF"
+    )
+    result = parse_invoice_text(text)
+    assert result.bank_account == "DE88810800000313934700"
+    assert result.bank_name == "Commerzbank AG"
+
+
+def test_due_date_from_ohne_abzug_pattern():
+    text = "Bis zum 06.08.2026 ohne Abzug"
+    result = parse_invoice_text(text)
+    assert result.due_date == "06.08.2026"
+
+
+def test_skonto_from_bis_zum_erhalten_sie_pattern():
+    text = (
+        "Bis zum 30.07.2026 erhalten Sie 2,000 % Skonto Zahlbetrag: 3,78 EUR\n"
+        "Bis zum 06.08.2026 ohne Abzug"
+    )
+    result = parse_invoice_text(text)
+    assert result.skonto_percent == 2.0
+    assert result.skonto_date == "30.07.2026"
+    assert result.skonto_amount == 3.78
+    assert result.due_date == "06.08.2026"
+
+
+def test_skonto_amount_is_none_when_not_stated():
+    result = parse_invoice_text(SAMPLE_INVOICE)
+    assert result.skonto_amount is None

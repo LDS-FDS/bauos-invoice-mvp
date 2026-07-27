@@ -18,6 +18,7 @@ SAMPLE_INVOICE = {
     "skonto_date": None,
     "amount_with_skonto": None,
     "bank_account": None,
+    "bank_name": None,
 }
 
 
@@ -38,12 +39,35 @@ def test_build_response_computes_amount_with_skonto():
         due_date="31.07.2026",
         skonto_percent=2.0,
         skonto_date="10.07.2026",
+        skonto_amount=None,
         bank_account="DE89370400440532013000",
+        bank_name="Musterbank",
     )
 
     response = _build_response(data)
 
     assert response["amount_with_skonto"] == 4165.00
+    assert response["bank_name"] == "Musterbank"
+
+
+def test_build_response_prefers_stated_skonto_amount():
+    data = InvoiceData(
+        supplier="STARK Deutschland GmbH",
+        invoice_number="1",
+        invoice_date="22.07.2026",
+        total_amount=3.84,
+        currency="EUR",
+        due_date="06.08.2026",
+        skonto_percent=2.0,
+        skonto_date="30.07.2026",
+        skonto_amount=3.78,
+        bank_account=None,
+        bank_name=None,
+    )
+
+    response = _build_response(data)
+
+    assert response["amount_with_skonto"] == 3.78
 
 
 def test_build_response_without_skonto_has_no_amount_with_skonto():
@@ -56,7 +80,9 @@ def test_build_response_without_skonto_has_no_amount_with_skonto():
         due_date=None,
         skonto_percent=None,
         skonto_date=None,
+        skonto_amount=None,
         bank_account=None,
+        bank_name=None,
     )
 
     response = _build_response(data)
@@ -88,6 +114,24 @@ def test_invoice_status_lifecycle(client):
     assert client.get("/invoices").json() == []
 
 
+def test_export_invoices_pdf(client):
+    db.save_invoice(SAMPLE_INVOICE)
+
+    response = client.get("/invoices/export/pdf")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/pdf"
+    assert "attachment" in response.headers["content-disposition"]
+    assert response.content.startswith(b"%PDF")
+
+
+def test_export_invoices_pdf_when_empty(client):
+    response = client.get("/invoices/export/pdf")
+
+    assert response.status_code == 200
+    assert response.content.startswith(b"%PDF")
+
+
 def test_patch_unknown_invoice_returns_404(client):
     response = client.patch("/invoices/999999", json={"status": "bezahlt"})
     assert response.status_code == 404
@@ -113,7 +157,9 @@ def test_scanned_pdf_uses_image_extraction(client, monkeypatch):
             due_date=None,
             skonto_percent=None,
             skonto_date=None,
+            skonto_amount=None,
             bank_account=None,
+            bank_name=None,
         ),
     )
 
