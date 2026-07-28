@@ -174,6 +174,40 @@ def test_iban_does_not_swallow_trailing_bic_label():
     assert result.bank_name == "Musterbank Stuttgart"
 
 
+def test_amount_from_total_column_header():
+    text = (
+        "MWSt.-pflichtig 19.00% MWSt.-frei MWSt.-Betrag Total\n"
+        "123,76 EUR 0,00 EUR 23,51 EUR 147,27 EUR"
+    )
+    result = parse_invoice_text(text)
+    assert result.total_amount == 147.27
+    assert result.currency == "EUR"
+
+
+def test_invoice_date_from_datum_table_header():
+    text = (
+        "Musterbau GmbH\n"
+        "Rechnung 909674920\n"
+        "Kunde Datum Seite\n"
+        "8410010013 28.07.2026 1/2\n"
+    )
+    result = parse_invoice_text(text)
+    assert result.invoice_date == "28.07.2026"
+
+
+def test_due_date_and_skonto_from_combined_zahlbar_bis_pattern():
+    text = (
+        "Zahlungsbedingung: 8 Tage mit 2%, 14 Tage netto\n"
+        "Zahlbar bis 05.08.2026: 144,74 EUR / bis 11.08.2026: 147,27 EUR"
+    )
+    result = parse_invoice_text(text)
+    assert result.due_date == "11.08.2026"
+    assert result.skonto_date == "05.08.2026"
+    assert result.skonto_amount == 144.74
+    assert result.skonto_percent == 2.0
+    assert result.total_amount == 147.27
+
+
 def test_bank_name_from_bank_colon_label():
     text = "Bank: LBBW Musterstadt BLZ: 600 501 01, IBAN: DE33 6005 0101 0002 0430 58"
     result = parse_invoice_text(text)

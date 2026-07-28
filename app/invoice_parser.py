@@ -43,6 +43,17 @@ _DUE_DATE_OHNE_ABZUG_RE = re.compile(
     re.IGNORECASE,
 )
 
+_DUE_SKONTO_COMBINED_RE = re.compile(
+    r"Zahlbar\s+bis\s+(\d{1,2}\.\d{1,2}\.\d{2,4})\s*:\s*(\d[\d. ]*,\d{2})\s*(?:EUR|€)?\s*/\s*"
+    r"bis\s+(\d{1,2}\.\d{1,2}\.\d{2,4})\s*:\s*(\d[\d. ]*,\d{2})",
+    re.IGNORECASE,
+)
+
+_SKONTO_TAGE_MIT_RE = re.compile(
+    r"\d+\s*Tage\s+mit\s+(\d{1,2}(?:,\d+)?)\s*%",
+    re.IGNORECASE,
+)
+
 _SKONTO_RE = re.compile(
     r"(\d{1,2}(?:,\d+)?)\s*%\s*Skonto(?:[^\d\n]{0,30}(\d{1,2}\.\d{1,2}\.\d{2,4}))?",
     re.IGNORECASE,
@@ -77,6 +88,7 @@ _BANK_NAME_RE = re.compile(
 )
 
 _AMOUNT_TOKEN_RE = re.compile(r"^\d[\d.]*,\d{2}$")
+_DATE_TOKEN_RE = re.compile(r"^\d{1,2}\.\d{1,2}\.\d{2,4}$")
 
 _AMOUNT_GEGEBEN_RE = re.compile(
     r"Gegeben\s*:?\s*(?:[A-Za-zÄÖÜäöüß\-]+\s+)?(\d[\d. ]*,\d{2})\s*(EUR|€)?",
@@ -162,12 +174,23 @@ def _extract_supplier(lines: list[str], text: str) -> str | None:
 
 def _extract_amount_from_endbetrag_table(lines: list[str]) -> tuple[float | None, str | None]:
     for i, line in enumerate(lines):
-        if re.search(r"\bEndbetrag\b", line, re.IGNORECASE):
+        if re.search(r"\b(?:Endbetrag|Total)\b", line, re.IGNORECASE):
             for candidate_line in lines[i + 1 : i + 3]:
                 tokens = [t for t in candidate_line.split() if _AMOUNT_TOKEN_RE.match(t)]
                 if tokens:
                     return _parse_german_amount(tokens[-1]), "EUR"
     return None, None
+
+
+def _extract_date_from_datum_table(lines: list[str]) -> str | None:
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if re.search(r"\bDatum\b", stripped, re.IGNORECASE) and not re.search(r"\d", stripped):
+            for candidate_line in lines[i + 1 : i + 3]:
+                tokens = [t for t in candidate_line.split() if _DATE_TOKEN_RE.match(t)]
+                if tokens:
+                    return tokens[0]
+    return None
 
 
 def _extract_bank_name(lines: list[str], bank_account: str | None) -> str | None:
@@ -187,7 +210,7 @@ def _extract_bank_name(lines: list[str], bank_account: str | None) -> str | None
     return None
 
 
-def _extract_invoice_number_and_date(text: str) -> tuple[str | None, str | None]:
+def _extract_invoice_number_and_date(text: str, lines: list[str]) -> tuple[str | None, str | None]:
     invoice_number = None
     invoice_date = None
 
@@ -206,6 +229,9 @@ def _extract_invoice_number_and_date(text: str) -> tuple[str | None, str | None]
         if match := _INVOICE_NUMBER_BARE_RE.search(text):
             invoice_number = match.group(1)
 
+    if invoice_date is None:
+        invoice_date = _extract_date_from_datum_table(lines)
+
     return invoice_number, invoice_date
 
 
@@ -213,7 +239,7 @@ def parse_invoice_text(text: str) -> InvoiceData:
     lines = text.splitlines()
 
     supplier = _extract_supplier(lines, text)
-    invoice_number, invoice_date = _extract_invoice_number_and_date(text)
+    invoice_number, invoice_date = _extract_invoice_number_and_date(text, lines)
 
     total_amount = None
     currency = None
@@ -228,23 +254,38 @@ def parse_invoice_text(text: str) -> InvoiceData:
             currency = match.group(2) or "EUR"
 
     due_date = None
-    if match := _DUE_DATE_RE.search(text):
-        due_date = match.group(1)
+    skonto_percent = None
+    skonto_date = None
+    skonto_amount = None
+
+    if match := _DUE_SKONTO_COMBINED_RE.search(text):
+        skonto_date = match.group(1)
+        skonto_amount = _parse_german_amount(match.group(2))
+        due_date = match.group(3)
+        if total_amount is None:
+            total_amount = _parse_german_amount(match.group(4))
+            currency = currency or "EUR"
+
+    if due_date is None:
+        if match := _DUE_DATE_RE.search(text):
+            due_date = match.group(1)
     if due_date is None:
         if match := _DUE_DATE_OHNE_ABZUG_RE.search(text):
             due_date = match.group(1)
 
-    skonto_percent = None
-    skonto_date = None
-    skonto_amount = None
-    if match := _SKONTO_BIS_ZUM_RE.search(text):
-        skonto_date = match.group(1)
-        skonto_percent = float(match.group(2).replace(",", "."))
-        if match.group(3):
-            skonto_amount = _parse_german_amount(match.group(3))
-    elif match := _SKONTO_RE.search(text):
-        skonto_percent = float(match.group(1).replace(",", "."))
-        skonto_date = match.group(2)
+    if skonto_date is None:
+        if match := _SKONTO_BIS_ZUM_RE.search(text):
+            skonto_date = match.group(1)
+            skonto_percent = float(match.group(2).replace(",", "."))
+            if match.group(3):
+                skonto_amount = _parse_german_amount(match.group(3))
+        elif match := _SKONTO_RE.search(text):
+            skonto_percent = float(match.group(1).replace(",", "."))
+            skonto_date = match.group(2)
+
+    if skonto_percent is None:
+        if match := _SKONTO_TAGE_MIT_RE.search(text):
+            skonto_percent = float(match.group(1).replace(",", "."))
 
     if skonto_percent is not None and skonto_date is None:
         if match := _SKONTO_LASTSCHRIFT_DATE_RE.search(text):
