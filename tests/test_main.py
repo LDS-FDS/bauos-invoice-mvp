@@ -25,6 +25,7 @@ SAMPLE_INVOICE = {
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     monkeypatch.setattr(db, "DEFAULT_DB_PATH", tmp_path / "test.db")
+    monkeypatch.setattr(main_module, "INVOICE_FILES_DIR", tmp_path / "invoice_files")
     db.init_db()
     customers_db.init_customers_table()
     company_settings.init_company_settings_table()
@@ -151,6 +152,59 @@ def test_invoice_status_accepts_storniert_and_archiviert(client):
     archiviert = client.patch(f"/invoices/{invoice_id}", json={"status": "archiviert"})
     assert archiviert.status_code == 200
     assert archiviert.json()["status"] == "archiviert"
+
+
+def test_marking_bezahlt_without_filing_base_path_sets_warning(client):
+    invoice_id = db.save_invoice(SAMPLE_INVOICE)
+
+    patched = client.patch(f"/invoices/{invoice_id}", json={"status": "bezahlt"})
+
+    assert patched.status_code == 200
+    assert "filing_warning" in patched.json()
+
+
+def test_marking_bezahlt_files_invoice_into_three_locations(client, monkeypatch, tmp_path):
+    monkeypatch.setattr(main_module, "_extract_text_from_pdf", lambda file_bytes: "some text")
+    monkeypatch.setattr(
+        main_module,
+        "parse_invoice_text",
+        lambda text: InvoiceData(
+            supplier="Brillux",
+            invoice_number="7182750",
+            invoice_date="29.06.2026",
+            total_amount=100.0,
+            currency="EUR",
+            due_date="10.07.2026",
+            skonto_percent=None,
+            skonto_date=None,
+            skonto_amount=None,
+            bank_account=None,
+            bank_name=None,
+        ),
+    )
+
+    parsed = client.post(
+        "/invoices/parse",
+        files={"file": ("rechnung.pdf", b"%PDF-fake", "application/pdf")},
+    )
+    invoice_id = parsed.json()["id"]
+
+    filing_base = tmp_path / "1. CIDE"
+    client.put("/company-settings", json={"filing_base_path": str(filing_base)})
+
+    patched = client.patch(f"/invoices/{invoice_id}", json={"status": "bezahlt"})
+
+    assert patched.status_code == 200
+    assert "filing_warning" not in patched.json()
+
+    expected_filename = "260629 INV Brillux RE-NR. 7182750.pdf"
+    assert (filing_base / "03 Vertragspartner" / "Brillux" / expected_filename).exists()
+    assert (
+        filing_base / "09 FIBU" / "2026" / "06 Juni 2026" / "01 Eingang" / expected_filename
+    ).exists()
+    assert (
+        filing_base / "09 FIBU" / "2026" / "06 Juni 2026" / "02 für Datev" / expected_filename
+    ).exists()
 
 
 def test_invoice_status_rejects_invalid_value(client):

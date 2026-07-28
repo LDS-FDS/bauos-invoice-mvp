@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from app.db import get_connection
+from app.db import _add_column_if_missing, get_connection
 
 _COLUMNS = [
     "name",
@@ -15,6 +15,7 @@ _COLUMNS = [
     "bank_name",
     "bank_iban",
     "default_payment_term_days",
+    "filing_base_path",
 ]
 
 
@@ -38,6 +39,7 @@ def init_company_settings_table(db_path: Path | None = None) -> None:
             )
             """
         )
+        _add_column_if_missing(conn, "company_settings", "filing_base_path", "TEXT")
         conn.commit()
     finally:
         conn.close()

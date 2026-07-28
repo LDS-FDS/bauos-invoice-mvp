@@ -1,4 +1,5 @@
 import io
+from pathlib import Path
 from typing import Literal
 
 import pdfplumber
@@ -6,11 +7,13 @@ from fastapi import FastAPI, HTTPException, UploadFile
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 
-from app import company_settings, customers_db, db, documents_db, projects_db
+from app import company_settings, customers_db, db, documents_db, invoice_filing, projects_db
 from app.ai_invoice_extractor import extract_invoice_from_image, extract_invoice_with_ai
 from app.document_pdf import build_document_pdf
 from app.invoice_parser import parse_invoice_text
 from app.pdf_export import build_invoice_list_pdf
+
+INVOICE_FILES_DIR = Path(__file__).resolve().parent.parent / "invoice_files"
 
 app = FastAPI(title="BauOS Invoice MVP")
 db.init_db()
@@ -85,6 +88,13 @@ async def parse_invoice(file: UploadFile):
             result = extract_invoice_with_ai(text)
 
     response = _build_response(result)
+
+    INVOICE_FILES_DIR.mkdir(parents=True, exist_ok=True)
+    stored_filename = invoice_filing.build_invoice_filename(response)
+    stored_path = INVOICE_FILES_DIR / stored_filename
+    stored_path.write_bytes(file_bytes)
+    response["file_path"] = str(stored_path)
+
     invoice_id = db.save_invoice(response)
     return {**response, "id": invoice_id, "status": "offen"}
 
@@ -112,7 +122,22 @@ class StatusUpdate(BaseModel):
 def update_invoice_status(invoice_id: int, body: StatusUpdate) -> dict:
     if not db.update_status(invoice_id, body.status):
         raise HTTPException(status_code=404, detail="Invoice not found")
-    return db.get_invoice(invoice_id)
+
+    invoice = db.get_invoice(invoice_id)
+
+    if body.status == "bezahlt":
+        base_path = company_settings.get_company_settings().get("filing_base_path")
+        if not base_path:
+            invoice["filing_warning"] = "Kein Dropbox-Basispfad in den Firmendaten konfiguriert."
+        else:
+            try:
+                written = invoice_filing.file_paid_invoice(invoice, base_path)
+            except Exception:
+                written = []
+            if len(written) < 3:
+                invoice["filing_warning"] = "Rechnung konnte nicht vollständig abgelegt werden."
+
+    return invoice
 
 
 @app.delete("/invoices/{invoice_id}")
@@ -188,6 +213,7 @@ class CompanySettingsIn(BaseModel):
     bank_name: str | None = None
     bank_iban: str | None = None
     default_payment_term_days: int | None = None
+    filing_base_path: str | None = None
 
 
 @app.get("/company-settings")

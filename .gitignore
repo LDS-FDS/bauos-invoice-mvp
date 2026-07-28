@@ -5,3 +5,4 @@ __pycache__/
 *.db
 server.pid
 server.log
+invoice_files/

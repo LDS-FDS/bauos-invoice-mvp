@@ -547,8 +547,10 @@
         <input type="text" id="companyBankName" placeholder="Bank">
         <input type="text" id="companyBankIban" placeholder="IBAN">
         <input type="number" id="companyPaymentTermDays" placeholder="Standard-Zahlungsziel (Tage)" class="span-2">
+        <input type="text" id="companyFilingBasePath" placeholder="Dropbox-Basispfad (für automatische Ablage bezahlter Rechnungen)" class="span-2">
       </div>
       <p class="empty-hint">Wird verwendet, um "Zahlbar bis" bei neuen Rechnungen automatisch zu berechnen (Rechnungsdatum + Tage). Leer lassen, um es manuell einzutragen.</p>
+      <p class="empty-hint">Der Dropbox-Basispfad wird verwendet, um bezahlte Eingangsrechnungen automatisch in "03 Vertragspartner", "09 FIBU/.../01 Eingang" und "09 FIBU/.../02 für Datev" abzulegen. Leer lassen, um die automatische Ablage zu deaktivieren.</p>
       <button id="saveCompanyBtn">Speichern</button>
       <div id="companyStatus" class="status"></div>
     </div>
@@ -894,11 +896,15 @@
         body: JSON.stringify({ project_id: projectId }),
       });
     } else if (e.target.classList.contains("invoice-status-select")) {
-      await fetch(`/invoices/${e.target.dataset.id}`, {
+      const response = await fetch(`/invoices/${e.target.dataset.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: e.target.value }),
       });
+      const updated = await response.json();
+      if (updated.filing_warning) {
+        alert(updated.filing_warning);
+      }
       await loadInvoices();
     }
   });
@@ -1056,6 +1062,7 @@
     companyBankName: "bank_name",
     companyBankIban: "bank_iban",
     companyPaymentTermDays: "default_payment_term_days",
+    companyFilingBasePath: "filing_base_path",
   };
 
   async function loadCompanySettings() {
