@@ -38,7 +38,12 @@ def build_document_pdf(document: dict, company: dict) -> bytes:
         "muted", parent=styles["Normal"], textColor=_TEXT_MUTED, fontSize=9
     )
 
-    doc_type_label = "ANGEBOT" if document["doc_type"] == "angebot" else "RECHNUNG"
+    if document["doc_type"] == "angebot":
+        doc_type_label = "ANGEBOT"
+    elif document["doc_type"] == "abschlagsrechnung":
+        doc_type_label = f"{document.get('abschlag_number')}. ABSCHLAGSRECHNUNG"
+    else:
+        doc_type_label = "RECHNUNG"
     customer = document.get("customer") or {}
     currency = "EUR"
 
@@ -122,7 +127,15 @@ def build_document_pdf(document: dict, company: dict) -> bytes:
         ["MwSt.", _fmt_amount(document.get("tax_total"), currency)],
         ["Gesamtbetrag", _fmt_amount(document.get("gross_total"), currency)],
     ]
-    summary_table = Table(summary_rows, colWidths=[4 * cm, 3 * cm], hAlign="RIGHT")
+    abschlag_deduction = document.get("abschlag_deduction") or 0
+    has_deduction = document["doc_type"] == "rechnung" and abschlag_deduction > 0
+    if has_deduction:
+        summary_rows.append(
+            ["Bereits erhaltene Abschläge", f"-{_fmt_amount(abschlag_deduction, currency)}"]
+        )
+        summary_rows.append(["Restbetrag", _fmt_amount(document.get("amount_due"), currency)])
+    summary_col_widths = [6 * cm, 3 * cm] if has_deduction else [4 * cm, 3 * cm]
+    summary_table = Table(summary_rows, colWidths=summary_col_widths, hAlign="RIGHT")
     summary_table.setStyle(
         TableStyle(
             [
@@ -142,7 +155,7 @@ def build_document_pdf(document: dict, company: dict) -> bytes:
         elements.append(Paragraph(document["notes"], styles["Normal"]))
         elements.append(Spacer(1, 0.5 * cm))
 
-    if document["doc_type"] == "rechnung":
+    if document["doc_type"] in ("rechnung", "abschlagsrechnung"):
         bank_parts = []
         if company.get("bank_name"):
             bank_parts.append(f"Bank: {company['bank_name']}")

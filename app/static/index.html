@@ -602,6 +602,7 @@
         <select id="docType" class="span-2">
           <option value="angebot">Angebot</option>
           <option value="rechnung">Rechnung</option>
+          <option value="abschlagsrechnung">Abschlagsrechnung</option>
         </select>
         <select id="docCustomer" class="span-2">
           <option value="">Kunde wählen...</option>
@@ -618,6 +619,13 @@
           <input type="date" id="docValidDueDate">
         </div>
         <textarea id="docNotes" class="span-2" placeholder="Notizen (optional)" rows="2"></textarea>
+      </div>
+
+      <div id="abschlagHint" class="empty-hint" style="display:none; margin-bottom:12px;">
+        <label>
+          <input type="checkbox" id="abschlagDeductCheckbox" checked>
+          Bereits gestellte Abschlagszahlungen (<span id="abschlagTotalText">0,00 €</span>) automatisch abziehen
+        </label>
       </div>
 
       <div class="item-row-header">
@@ -1096,11 +1104,39 @@
     return `${value.toFixed(2).replace(".", ",")} €`;
   }
 
+  function docTypeLabel(doc) {
+    if (doc.doc_type === "angebot") return "Angebot";
+    if (doc.doc_type === "abschlagsrechnung") return `${doc.abschlag_number}. Abschlagsrechnung`;
+    return "Rechnung";
+  }
+
   function updateDueLabel() {
     docValidDueLabel.textContent = docTypeSelect.value === "angebot" ? "Gültig bis" : "Zahlbar bis";
   }
   docTypeSelect.addEventListener("change", updateDueLabel);
   updateDueLabel();
+
+  let currentAbschlagTotal = 0;
+
+  async function updateAbschlagHint() {
+    const hint = document.getElementById("abschlagHint");
+    const projectValue = document.getElementById("docProject").value;
+    currentAbschlagTotal = 0;
+    if (docTypeSelect.value !== "rechnung" || !projectValue) {
+      hint.style.display = "none";
+      return;
+    }
+    const summary = await (await fetch(`/projects/${projectValue}/summary`)).json();
+    currentAbschlagTotal = summary.abschlag_total || 0;
+    if (currentAbschlagTotal > 0) {
+      document.getElementById("abschlagTotalText").textContent = formatEuro(currentAbschlagTotal);
+      hint.style.display = "block";
+    } else {
+      hint.style.display = "none";
+    }
+  }
+  docTypeSelect.addEventListener("change", updateAbschlagHint);
+  document.getElementById("docProject").addEventListener("change", updateAbschlagHint);
 
   function readItems() {
     return [...itemRowsContainer.querySelectorAll(".item-row")].map((row) => ({
@@ -1181,6 +1217,11 @@
 
     const docType = docTypeSelect.value;
     const projectValue = document.getElementById("docProject").value;
+    if (docType === "abschlagsrechnung" && !projectValue) {
+      statusEl.textContent = "Abschlagsrechnungen benötigen ein Projekt.";
+      statusEl.className = "status error";
+      return;
+    }
     const payload = {
       doc_type: docType,
       customer_id: parseInt(customerId, 10),
@@ -1192,6 +1233,13 @@
     const dueValue = toGermanDate(docValidDueInput.value);
     if (docType === "angebot") payload.valid_until = dueValue;
     else payload.due_date = dueValue;
+    if (
+      docType === "rechnung" &&
+      currentAbschlagTotal > 0 &&
+      document.getElementById("abschlagDeductCheckbox").checked
+    ) {
+      payload.abschlag_deduction = currentAbschlagTotal;
+    }
 
     const response = await fetch("/documents", {
       method: "POST",
@@ -1212,6 +1260,7 @@
     document.getElementById("docNotes").value = "";
     document.getElementById("docCustomer").value = "";
     document.getElementById("docProject").value = "";
+    await updateAbschlagHint();
     await loadDocuments();
     closeModal(documentModalOverlay);
   });
@@ -1219,6 +1268,7 @@
   const DOC_STATUS_OPTIONS = {
     angebot: ["entwurf", "versendet", "angenommen", "abgelehnt", "storniert", "archiviert"],
     rechnung: ["entwurf", "versendet", "bezahlt", "storniert", "archiviert"],
+    abschlagsrechnung: ["entwurf", "versendet", "bezahlt", "storniert", "archiviert"],
   };
 
   function computeDocumentCategory(doc) {
@@ -1271,13 +1321,18 @@
           ? `<button class="btn-secondary" data-action="convert" data-id="${doc.id}">In Rechnung umwandeln</button>`
           : "";
 
+      const amountCell =
+        doc.doc_type === "rechnung" && (doc.abschlag_deduction || 0) > 0
+          ? `${formatEuro(doc.gross_total || 0)}<br><span class="empty-hint">Rest: ${formatEuro(doc.amount_due || 0)}</span>`
+          : formatEuro(doc.gross_total || 0);
+
       tr.innerHTML = `
         <td>${doc.doc_number}</td>
-        <td>${doc.doc_type === "angebot" ? "Angebot" : "Rechnung"}</td>
+        <td>${docTypeLabel(doc)}</td>
         <td>${doc.customer_name || "–"}</td>
         <td><select class="document-project-select" data-id="${doc.id}">${projectOptionsHtml(doc.project_id)}</select></td>
         <td>${doc.issue_date || "–"}</td>
-        <td>${formatEuro(doc.gross_total || 0)}</td>
+        <td>${amountCell}</td>
         <td><select data-id="${doc.id}" class="doc-status-select">${optionsHtml}</select></td>
         <td class="row-actions">
           <a class="btn-secondary" href="/documents/${doc.id}/pdf">PDF</a>
@@ -1461,10 +1516,7 @@
           .join("") || '<div class="empty-hint">Keine Rechnungen zugeordnet.</div>';
       const documentLines =
         summary.documents
-          .map(
-            (d) =>
-              `<div>${d.doc_number} (${d.doc_type === "angebot" ? "Angebot" : "Rechnung"}) — ${formatEuro(d.gross_total || 0)}</div>`
-          )
+          .map((d) => `<div>${d.doc_number} (${docTypeLabel(d)}) — ${formatEuro(d.gross_total || 0)}</div>`)
           .join("") || '<div class="empty-hint">Keine Angebote/Rechnungen zugeordnet.</div>';
 
       detailRow.querySelector("div").innerHTML = `
@@ -1481,6 +1533,7 @@
         <div class="totals-box">
           <div><span>Kosten</span><span>${formatEuro(summary.costs)}</span></div>
           <div><span>Erlöse</span><span>${formatEuro(summary.revenue)}</span></div>
+          <div><span>Bereits abgerechnet (Abschläge)</span><span>${formatEuro(summary.abschlag_total || 0)}</span></div>
           <div class="grand"><span>Saldo</span><span>${formatEuro(summary.balance)}</span></div>
         </div>
       `;

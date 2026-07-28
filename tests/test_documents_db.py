@@ -1,3 +1,5 @@
+import pytest
+
 from app import company_settings, customers_db, documents_db, projects_db
 
 SAMPLE_CUSTOMER = {
@@ -243,3 +245,85 @@ def test_converted_invoice_inherits_project(tmp_path):
     invoice_id = documents_db.convert_to_invoice(angebot_id, db_path)
 
     assert documents_db.get_document(invoice_id, db_path)["project_id"] == project_id
+
+
+def test_abschlagsrechnung_requires_project(tmp_path):
+    db_path, customer_id = _setup(tmp_path)
+
+    with pytest.raises(ValueError):
+        documents_db.create_document(
+            "abschlagsrechnung", customer_id, SAMPLE_ITEMS, db_path=db_path
+        )
+
+
+def test_abschlagsrechnung_doc_number_prefix(tmp_path):
+    db_path, customer_id = _setup(tmp_path)
+    project_id = projects_db.create_project({"name": "Testprojekt"}, db_path)
+
+    document_id = documents_db.create_document(
+        "abschlagsrechnung", customer_id, SAMPLE_ITEMS, project_id=project_id, db_path=db_path
+    )
+
+    assert documents_db.get_document(document_id, db_path)["doc_number"].startswith("AB-")
+
+
+def test_abschlag_number_counts_per_project(tmp_path):
+    db_path, customer_id = _setup(tmp_path)
+    project_a = projects_db.create_project({"name": "Projekt A"}, db_path)
+    project_b = projects_db.create_project({"name": "Projekt B"}, db_path)
+
+    first = documents_db.create_document(
+        "abschlagsrechnung", customer_id, SAMPLE_ITEMS, project_id=project_a, db_path=db_path
+    )
+    second = documents_db.create_document(
+        "abschlagsrechnung", customer_id, SAMPLE_ITEMS, project_id=project_a, db_path=db_path
+    )
+    other_project = documents_db.create_document(
+        "abschlagsrechnung", customer_id, SAMPLE_ITEMS, project_id=project_b, db_path=db_path
+    )
+
+    assert documents_db.get_document(first, db_path)["abschlag_number"] == 1
+    assert documents_db.get_document(second, db_path)["abschlag_number"] == 2
+    assert documents_db.get_document(other_project, db_path)["abschlag_number"] == 1
+
+    listed = documents_db.list_documents(project_id=project_a, db_path=db_path)
+    numbers = {doc["id"]: doc["abschlag_number"] for doc in listed}
+    assert numbers[first] == 1
+    assert numbers[second] == 2
+
+
+def test_get_abschlag_total_sums_and_ignores_storniert(tmp_path):
+    db_path, customer_id = _setup(tmp_path)
+    project_id = projects_db.create_project({"name": "Testprojekt"}, db_path)
+
+    cancelled_items = [{"description": "Storniert", "quantity": 1, "unit_price": 1000.0, "tax_rate": 19.0}]
+    kept_items = [{"description": "Gueltig", "quantity": 1, "unit_price": 200.0, "tax_rate": 19.0}]
+
+    cancelled = documents_db.create_document(
+        "abschlagsrechnung", customer_id, cancelled_items, project_id=project_id, db_path=db_path
+    )
+    kept = documents_db.create_document(
+        "abschlagsrechnung", customer_id, kept_items, project_id=project_id, db_path=db_path
+    )
+    documents_db.update_document_status(cancelled, "storniert", db_path)
+
+    total = documents_db.get_abschlag_total(project_id, db_path)
+
+    assert total == documents_db.get_document(kept, db_path)["gross_total"]
+
+
+def test_amount_due_reflects_abschlag_deduction(tmp_path):
+    db_path, customer_id = _setup(tmp_path)
+    project_id = projects_db.create_project({"name": "Testprojekt"}, db_path)
+
+    document_id = documents_db.create_document(
+        "rechnung",
+        customer_id,
+        SAMPLE_ITEMS,
+        project_id=project_id,
+        abschlag_deduction=100.0,
+        db_path=db_path,
+    )
+
+    document = documents_db.get_document(document_id, db_path)
+    assert document["amount_due"] == round(document["gross_total"] - 100.0, 2)

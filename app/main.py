@@ -209,13 +209,14 @@ class DocumentItemIn(BaseModel):
 
 
 class DocumentCreate(BaseModel):
-    doc_type: Literal["angebot", "rechnung"]
+    doc_type: Literal["angebot", "rechnung", "abschlagsrechnung"]
     customer_id: int
     issue_date: str | None = None
     valid_until: str | None = None
     due_date: str | None = None
     notes: str | None = None
     project_id: int | None = None
+    abschlag_deduction: float = 0
     items: list[DocumentItemIn]
 
 
@@ -233,6 +234,10 @@ def create_document(payload: DocumentCreate) -> dict:
         raise HTTPException(status_code=400, detail="At least one item is required")
     if payload.project_id is not None and projects_db.get_project(payload.project_id) is None:
         raise HTTPException(status_code=404, detail="Project not found")
+    if payload.doc_type == "abschlagsrechnung" and payload.project_id is None:
+        raise HTTPException(
+            status_code=400, detail="Abschlagsrechnungen benötigen ein Projekt"
+        )
 
     document_id = documents_db.create_document(
         doc_type=payload.doc_type,
@@ -243,13 +248,14 @@ def create_document(payload: DocumentCreate) -> dict:
         due_date=payload.due_date,
         notes=payload.notes,
         project_id=payload.project_id,
+        abschlag_deduction=payload.abschlag_deduction,
     )
     return documents_db.get_document(document_id)
 
 
 @app.get("/documents")
 def list_documents(
-    doc_type: Literal["angebot", "rechnung"] | None = None,
+    doc_type: Literal["angebot", "rechnung", "abschlagsrechnung"] | None = None,
     project_id: int | None = None,
 ) -> list[dict]:
     return documents_db.list_documents(doc_type, project_id)
@@ -358,6 +364,7 @@ def get_project_summary(project_id: int) -> dict:
     revenue = sum(
         doc["gross_total"] or 0 for doc in documents if doc["doc_type"] == "rechnung"
     )
+    abschlag_total = documents_db.get_abschlag_total(project_id)
 
     return {
         "project": project,
@@ -366,6 +373,7 @@ def get_project_summary(project_id: int) -> dict:
         "costs": round(costs, 2),
         "revenue": round(revenue, 2),
         "balance": round(revenue - costs, 2),
+        "abschlag_total": abschlag_total,
     }
 
 

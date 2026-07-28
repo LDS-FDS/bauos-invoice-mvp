@@ -534,3 +534,67 @@ def test_project_summary(client):
 
 def test_project_summary_unknown_project_returns_404(client):
     assert client.get("/projects/9999/summary").status_code == 404
+
+
+def test_create_abschlagsrechnung_without_project_returns_400(client):
+    customer_id = _create_customer(client)
+    response = client.post(
+        "/documents",
+        json={"doc_type": "abschlagsrechnung", "customer_id": customer_id, "items": SAMPLE_ITEMS},
+    )
+    assert response.status_code == 400
+
+
+def test_create_abschlagsrechnung_with_project(client):
+    customer_id = _create_customer(client)
+    project_id = client.post("/projects", json=SAMPLE_PROJECT).json()["id"]
+
+    response = client.post(
+        "/documents",
+        json={
+            "doc_type": "abschlagsrechnung",
+            "customer_id": customer_id,
+            "items": SAMPLE_ITEMS,
+            "project_id": project_id,
+        },
+    )
+    assert response.status_code == 200
+    document = response.json()
+    assert document["doc_number"].startswith("AB-")
+    assert document["abschlag_number"] == 1
+
+
+def test_project_summary_includes_abschlag_total(client):
+    customer_id = _create_customer(client)
+    project_id = client.post("/projects", json=SAMPLE_PROJECT).json()["id"]
+    client.post(
+        "/documents",
+        json={
+            "doc_type": "abschlagsrechnung",
+            "customer_id": customer_id,
+            "items": SAMPLE_ITEMS,
+            "project_id": project_id,
+        },
+    )
+
+    summary = client.get(f"/projects/{project_id}/summary").json()
+
+    assert summary["abschlag_total"] == 535.5
+
+
+def test_create_rechnung_with_abschlag_deduction_reduces_amount_due(client):
+    customer_id = _create_customer(client)
+    project_id = client.post("/projects", json=SAMPLE_PROJECT).json()["id"]
+
+    document = client.post(
+        "/documents",
+        json={
+            "doc_type": "rechnung",
+            "customer_id": customer_id,
+            "items": SAMPLE_ITEMS,
+            "project_id": project_id,
+            "abschlag_deduction": 200.0,
+        },
+    ).json()
+
+    assert document["amount_due"] == round(document["gross_total"] - 200.0, 2)
