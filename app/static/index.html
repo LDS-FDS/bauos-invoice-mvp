@@ -243,6 +243,77 @@
   .tab-btn:hover:not(:disabled) { background: transparent; color: var(--text); }
   .tab-btn.active { color: var(--blue-dark); border-bottom-color: var(--blue-dark); }
 
+  .beleg-layout {
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+  }
+
+  .beleg-sidebar {
+    flex: 0 0 180px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .beleg-sidebar-item {
+    width: auto;
+    margin: 0;
+    padding: 9px 12px;
+    text-align: left;
+    background: transparent;
+    color: var(--text-muted);
+    border: none;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 0.9rem;
+  }
+
+  .beleg-sidebar-item:hover:not(:disabled) { background: var(--beige); color: var(--text); }
+  .beleg-sidebar-item.active { background: var(--blue); color: #1e4a55; }
+
+  .beleg-content { flex: 1; min-width: 0; }
+
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(58, 53, 46, 0.45);
+    z-index: 100;
+    justify-content: center;
+    padding: 48px 16px;
+    overflow-y: auto;
+  }
+
+  .modal-overlay.open { display: flex; }
+
+  .modal-dialog {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 28px;
+    max-width: 640px;
+    width: 100%;
+    height: fit-content;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.18);
+    position: relative;
+  }
+
+  .modal-close {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    width: auto;
+    margin: 0;
+    padding: 4px 10px;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 1.2rem;
+    line-height: 1;
+  }
+
+  .modal-close:hover:not(:disabled) { background: var(--beige); color: var(--text); }
+
   .form-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -347,64 +418,83 @@
   <p class="subtitle">Rechnungserkennung, Kunden und Firmendaten.</p>
 
   <div class="tabs">
-    <button class="tab-btn active" data-tab="invoices">Rechnungen</button>
+    <button class="tab-btn active" data-tab="invoices">Eingehende Rechnungen</button>
     <button class="tab-btn" data-tab="customers">Kunden</button>
     <button class="tab-btn" data-tab="settings">Firmendaten</button>
-    <button class="tab-btn" data-tab="documents">Angebote &amp; Rechnungen</button>
+    <button class="tab-btn" data-tab="documents">Rechnungen schreiben</button>
     <button class="tab-btn" data-tab="projects">Projekte</button>
   </div>
 
   <div class="tab-panel" data-panel="invoices">
-  <div class="card">
-    <label class="dropzone" id="dropzone">
-      <div id="dropzoneText">
-        <strong>PDF-Rechnung auswählen</strong>
-        <p>oder hierher ziehen</p>
+  <div class="beleg-layout">
+    <div class="beleg-sidebar" id="invoiceSidebar">
+      <button class="beleg-sidebar-item active" data-filter="alle">Alle</button>
+      <button class="beleg-sidebar-item" data-filter="offene">Offene</button>
+      <button class="beleg-sidebar-item" data-filter="ueberfaellige">Überfällige</button>
+      <button class="beleg-sidebar-item" data-filter="bezahlt">Bezahlt</button>
+      <button class="beleg-sidebar-item" data-filter="storniert">Storniert</button>
+      <button class="beleg-sidebar-item" data-filter="archiviert">Archiviert</button>
+    </div>
+    <div class="beleg-content">
+      <div class="card">
+        <div class="card-header">
+          <h2>Rechnungsliste</h2>
+          <div style="display:flex; gap:8px;">
+            <a class="btn-secondary btn-export" href="/invoices/export/pdf">PDF exportieren</a>
+            <button class="btn-secondary btn-export" id="openInvoiceModalBtn" type="button">+ Rechnung erkennen</button>
+          </div>
+        </div>
+        <div id="invoiceListWrapper">
+          <p class="empty-hint" id="emptyHint">Noch keine Rechnungen gespeichert.</p>
+          <table id="invoiceTable" style="display:none">
+            <thead>
+              <tr>
+                <th>Nr.</th>
+                <th>Lieferant</th>
+                <th>Betrag</th>
+                <th>Zahlbar bis</th>
+                <th>Skonto bis</th>
+                <th>Projekt</th>
+                <th>Status</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="invoiceTableBody"></tbody>
+          </table>
+        </div>
       </div>
-      <span id="fileName"></span>
-      <input type="file" id="fileInput" accept="application/pdf">
-    </label>
-    <button id="submitBtn" disabled>Rechnung analysieren</button>
-    <div id="status" class="status"></div>
-  </div>
-
-  <div class="card" id="resultCard" style="display:none">
-    <div class="result-row"><span class="result-label">Lieferant</span><span class="result-value" id="r-supplier">–</span></div>
-    <div class="result-row"><span class="result-label">Rechnungsnummer</span><span class="result-value" id="r-invoice-number">–</span></div>
-    <div class="result-row"><span class="result-label">Rechnungsdatum</span><span class="result-value" id="r-invoice-date">–</span></div>
-    <div class="result-row"><span class="result-label">Gesamtbetrag</span><span class="result-value" id="r-amount">–</span></div>
-    <div class="result-row"><span class="result-label">Zahlbar bis</span><span class="result-value" id="r-due">–</span></div>
-    <div class="result-row"><span class="result-label">Skonto</span><span class="result-value" id="r-skonto">–</span></div>
-    <div class="result-row"><span class="result-label">Rechnungsbetrag mit Skonto</span><span class="result-value" id="r-amount-skonto">–</span></div>
-    <div class="result-row"><span class="result-label">Zahlbar bis mit Skonto</span><span class="result-value" id="r-due-skonto">–</span></div>
-    <div class="result-row"><span class="result-label">IBAN</span><span class="result-value" id="r-account">–</span></div>
-    <div class="result-row"><span class="result-label">Bank</span><span class="result-value" id="r-bank">–</span></div>
-  </div>
-
-  <div class="card">
-    <div class="card-header">
-      <h2>Alle Rechnungen</h2>
-      <a class="btn-secondary btn-export" href="/invoices/export/pdf">PDF exportieren</a>
-    </div>
-    <div id="invoiceListWrapper">
-      <p class="empty-hint" id="emptyHint">Noch keine Rechnungen gespeichert.</p>
-      <table id="invoiceTable" style="display:none">
-        <thead>
-          <tr>
-            <th>Nr.</th>
-            <th>Lieferant</th>
-            <th>Betrag</th>
-            <th>Zahlbar bis</th>
-            <th>Skonto bis</th>
-            <th>Projekt</th>
-            <th>Status</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody id="invoiceTableBody"></tbody>
-      </table>
     </div>
   </div>
+  </div>
+
+  <div class="modal-overlay" id="invoiceModalOverlay">
+    <div class="modal-dialog">
+      <button class="modal-close" id="closeInvoiceModalBtn" type="button">×</button>
+      <h2>Rechnung erkennen</h2>
+      <label class="dropzone" id="dropzone">
+        <div id="dropzoneText">
+          <strong>PDF-Rechnung auswählen</strong>
+          <p>oder hierher ziehen</p>
+        </div>
+        <span id="fileName"></span>
+        <input type="file" id="fileInput" accept="application/pdf">
+      </label>
+      <button id="submitBtn" disabled>Rechnung analysieren</button>
+      <div id="status" class="status"></div>
+
+      <div class="card" id="resultCard" style="display:none; margin-top:16px;">
+        <div class="result-row"><span class="result-label">Lieferant</span><span class="result-value" id="r-supplier">–</span></div>
+        <div class="result-row"><span class="result-label">Rechnungsnummer</span><span class="result-value" id="r-invoice-number">–</span></div>
+        <div class="result-row"><span class="result-label">Rechnungsdatum</span><span class="result-value" id="r-invoice-date">–</span></div>
+        <div class="result-row"><span class="result-label">Gesamtbetrag</span><span class="result-value" id="r-amount">–</span></div>
+        <div class="result-row"><span class="result-label">Zahlbar bis</span><span class="result-value" id="r-due">–</span></div>
+        <div class="result-row"><span class="result-label">Skonto</span><span class="result-value" id="r-skonto">–</span></div>
+        <div class="result-row"><span class="result-label">Rechnungsbetrag mit Skonto</span><span class="result-value" id="r-amount-skonto">–</span></div>
+        <div class="result-row"><span class="result-label">Zahlbar bis mit Skonto</span><span class="result-value" id="r-due-skonto">–</span></div>
+        <div class="result-row"><span class="result-label">IBAN</span><span class="result-value" id="r-account">–</span></div>
+        <div class="result-row"><span class="result-label">Bank</span><span class="result-value" id="r-bank">–</span></div>
+      </div>
+    </div>
   </div>
 
   <div class="tab-panel" data-panel="customers" style="display:none">
@@ -465,7 +555,48 @@
   </div>
 
   <div class="tab-panel" data-panel="documents" style="display:none">
-    <div class="card">
+  <div class="beleg-layout">
+    <div class="beleg-sidebar" id="documentSidebar">
+      <button class="beleg-sidebar-item active" data-filter="alle">Alle</button>
+      <button class="beleg-sidebar-item" data-filter="entwuerfe">Entwürfe</button>
+      <button class="beleg-sidebar-item" data-filter="offene">Offene</button>
+      <button class="beleg-sidebar-item" data-filter="ueberfaellige">Überfällige</button>
+      <button class="beleg-sidebar-item" data-filter="bezahlt">Bezahlt · Angenommen</button>
+      <button class="beleg-sidebar-item" data-filter="storniert">Storniert</button>
+      <button class="beleg-sidebar-item" data-filter="archiviert">Archiviert</button>
+    </div>
+    <div class="beleg-content">
+      <div class="card">
+        <div class="card-header">
+          <h2>Belegliste</h2>
+          <button class="btn-secondary btn-export" id="openDocumentModalBtn" type="button">+ Neuer Beleg</button>
+        </div>
+        <div id="documentListWrapper">
+          <p class="empty-hint" id="documentEmptyHint">Noch keine Angebote oder Rechnungen erstellt.</p>
+          <table id="documentTable" style="display:none">
+            <thead>
+              <tr>
+                <th>Nr.</th>
+                <th>Typ</th>
+                <th>Kunde</th>
+                <th>Projekt</th>
+                <th>Datum</th>
+                <th>Betrag</th>
+                <th>Status</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="documentTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+  </div>
+
+  <div class="modal-overlay" id="documentModalOverlay">
+    <div class="modal-dialog">
+      <button class="modal-close" id="closeDocumentModalBtn" type="button">×</button>
       <h2>Neues Angebot / Neue Rechnung</h2>
       <div class="form-grid">
         <select id="docType" class="span-2">
@@ -503,28 +634,6 @@
 
       <button id="createDocumentBtn">Erstellen</button>
       <div id="documentStatus" class="status"></div>
-    </div>
-
-    <div class="card">
-      <h2>Alle Angebote &amp; Rechnungen</h2>
-      <div id="documentListWrapper">
-        <p class="empty-hint" id="documentEmptyHint">Noch keine Angebote oder Rechnungen erstellt.</p>
-        <table id="documentTable" style="display:none">
-          <thead>
-            <tr>
-              <th>Nr.</th>
-              <th>Typ</th>
-              <th>Kunde</th>
-              <th>Projekt</th>
-              <th>Datum</th>
-              <th>Betrag</th>
-              <th>Status</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody id="documentTableBody"></tbody>
-        </table>
-      </div>
     </div>
   </div>
 
@@ -696,14 +805,16 @@
     return "";
   }
 
-  async function toggleStatus(id, currentStatus) {
-    const nextStatus = currentStatus === "bezahlt" ? "offen" : "bezahlt";
-    await fetch(`/invoices/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: nextStatus }),
-    });
-    await loadInvoices();
+  const INVOICE_STATUS_OPTIONS = ["offen", "bezahlt", "storniert", "archiviert"];
+
+  function computeInvoiceCategory(invoice) {
+    if (invoice.status === "storniert") return "storniert";
+    if (invoice.status === "archiviert") return "archiviert";
+    if (invoice.status === "bezahlt") return "bezahlt";
+    const today = startOfToday();
+    const due = parseGermanDate(invoice.due_date);
+    if (due && due < today) return "ueberfaellige";
+    return "offene";
   }
 
   async function deleteInvoice(id) {
@@ -711,14 +822,25 @@
     await loadInvoices();
   }
 
+  let allInvoices = [];
+  let invoiceFilter = "alle";
+
   async function loadInvoices() {
     const response = await fetch("/invoices");
-    const invoices = await response.json();
+    allInvoices = await response.json();
+    renderInvoiceTable();
+  }
 
+  function renderInvoiceTable() {
     const table = document.getElementById("invoiceTable");
     const emptyHint = document.getElementById("emptyHint");
     const tbody = document.getElementById("invoiceTableBody");
     tbody.innerHTML = "";
+
+    const invoices =
+      invoiceFilter === "alle"
+        ? allInvoices
+        : allInvoices.filter((inv) => computeInvoiceCategory(inv) === invoiceFilter);
 
     if (invoices.length === 0) {
       table.style.display = "none";
@@ -735,6 +857,9 @@
       const amount = invoice.total_amount != null
         ? `${invoice.total_amount} ${invoice.currency || ""}`.trim()
         : "–";
+      const statusOptionsHtml = INVOICE_STATUS_OPTIONS.map(
+        (s) => `<option value="${s}" ${s === invoice.status ? "selected" : ""}>${s}</option>`
+      ).join("");
 
       tr.innerHTML = `
         <td>${invoice.invoice_number || "–"}</td>
@@ -743,11 +868,8 @@
         <td>${invoice.due_date || "–"}</td>
         <td>${invoice.skonto_date || "–"}</td>
         <td><select class="invoice-project-select" data-id="${invoice.id}">${projectOptionsHtml(invoice.project_id)}</select></td>
-        <td><span class="badge ${invoice.status}">${invoice.status}</span></td>
+        <td><select class="invoice-status-select" data-id="${invoice.id}">${statusOptionsHtml}</select></td>
         <td class="row-actions">
-          <button class="btn-secondary" data-action="toggle" data-id="${invoice.id}" data-status="${invoice.status}">
-            ${invoice.status === "bezahlt" ? "Als offen markieren" : "Als bezahlt markieren"}
-          </button>
           <button class="btn-danger" data-action="delete" data-id="${invoice.id}">Löschen</button>
         </td>
       `;
@@ -756,24 +878,34 @@
   }
 
   document.getElementById("invoiceTableBody").addEventListener("change", async (e) => {
-    if (!e.target.classList.contains("invoice-project-select")) return;
-    const projectId = e.target.value ? parseInt(e.target.value, 10) : null;
-    await fetch(`/invoices/${e.target.dataset.id}/project`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ project_id: projectId }),
-    });
+    if (e.target.classList.contains("invoice-project-select")) {
+      const projectId = e.target.value ? parseInt(e.target.value, 10) : null;
+      await fetch(`/invoices/${e.target.dataset.id}/project`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ project_id: projectId }),
+      });
+    } else if (e.target.classList.contains("invoice-status-select")) {
+      await fetch(`/invoices/${e.target.dataset.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: e.target.value }),
+      });
+      await loadInvoices();
+    }
   });
 
   document.getElementById("invoiceTableBody").addEventListener("click", (e) => {
     const btn = e.target.closest("button");
     if (!btn) return;
-    const id = btn.dataset.id;
-    if (btn.dataset.action === "toggle") {
-      toggleStatus(id, btn.dataset.status);
-    } else if (btn.dataset.action === "delete") {
-      deleteInvoice(id);
+    if (btn.dataset.action === "delete") {
+      deleteInvoice(btn.dataset.id);
     }
+  });
+
+  wireSidebar("invoiceSidebar", (filter) => {
+    invoiceFilter = filter;
+    renderInvoiceTable();
   });
 
   loadInvoices();
@@ -787,6 +919,43 @@
       document.querySelector(`.tab-panel[data-panel="${btn.dataset.tab}"]`).style.display = "block";
     });
   });
+
+  // --- Modals ---
+  function openModal(overlay) { overlay.classList.add("open"); }
+  function closeModal(overlay) { overlay.classList.remove("open"); }
+
+  function wireModal(openBtnId, closeBtnId, overlayId) {
+    const overlay = document.getElementById(overlayId);
+    document.getElementById(openBtnId).addEventListener("click", () => openModal(overlay));
+    document.getElementById(closeBtnId).addEventListener("click", () => closeModal(overlay));
+    overlay.addEventListener("click", (e) => {
+      if (e.target === overlay) closeModal(overlay);
+    });
+    return overlay;
+  }
+
+  const invoiceModalOverlay = wireModal("openInvoiceModalBtn", "closeInvoiceModalBtn", "invoiceModalOverlay");
+  const documentModalOverlay = wireModal("openDocumentModalBtn", "closeDocumentModalBtn", "documentModalOverlay");
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      closeModal(invoiceModalOverlay);
+      closeModal(documentModalOverlay);
+    }
+  });
+
+  // --- Sidebar category filters ---
+  function wireSidebar(sidebarId, onChange) {
+    document.getElementById(sidebarId).addEventListener("click", (e) => {
+      const btn = e.target.closest(".beleg-sidebar-item");
+      if (!btn) return;
+      document
+        .querySelectorAll(`#${sidebarId} .beleg-sidebar-item`)
+        .forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      onChange(btn.dataset.filter);
+    });
+  }
 
   // --- Customers ---
   async function loadCustomers() {
@@ -1044,21 +1213,44 @@
     document.getElementById("docCustomer").value = "";
     document.getElementById("docProject").value = "";
     await loadDocuments();
+    closeModal(documentModalOverlay);
   });
 
   const DOC_STATUS_OPTIONS = {
-    angebot: ["entwurf", "versendet", "angenommen", "abgelehnt"],
-    rechnung: ["entwurf", "versendet", "bezahlt"],
+    angebot: ["entwurf", "versendet", "angenommen", "abgelehnt", "storniert", "archiviert"],
+    rechnung: ["entwurf", "versendet", "bezahlt", "storniert", "archiviert"],
   };
+
+  function computeDocumentCategory(doc) {
+    if (doc.status === "storniert") return "storniert";
+    if (doc.status === "archiviert") return "archiviert";
+    if (doc.status === "entwurf") return "entwuerfe";
+    if (doc.status === "bezahlt" || doc.status === "angenommen") return "bezahlt";
+    const today = startOfToday();
+    const due = parseGermanDate(doc.due_date || doc.valid_until);
+    if (due && due < today) return "ueberfaellige";
+    return "offene";
+  }
+
+  let allDocuments = [];
+  let documentFilter = "alle";
 
   async function loadDocuments() {
     const response = await fetch("/documents");
-    const documents = await response.json();
+    allDocuments = await response.json();
+    renderDocumentTable();
+  }
 
+  function renderDocumentTable() {
     const table = document.getElementById("documentTable");
     const emptyHint = document.getElementById("documentEmptyHint");
     const tbody = document.getElementById("documentTableBody");
     tbody.innerHTML = "";
+
+    const documents =
+      documentFilter === "alle"
+        ? allDocuments
+        : allDocuments.filter((d) => computeDocumentCategory(d) === documentFilter);
 
     if (documents.length === 0) {
       table.style.display = "none";
@@ -1128,6 +1320,11 @@
       body: JSON.stringify({ status: e.target.value }),
     });
     await loadDocuments();
+  });
+
+  wireSidebar("documentSidebar", (filter) => {
+    documentFilter = filter;
+    renderDocumentTable();
   });
 
   addItemRow();

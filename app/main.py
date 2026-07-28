@@ -105,7 +105,7 @@ def export_invoices_pdf() -> Response:
 
 
 class StatusUpdate(BaseModel):
-    status: Literal["offen", "bezahlt"]
+    status: Literal["offen", "bezahlt", "storniert", "archiviert"]
 
 
 @app.patch("/invoices/{invoice_id}")
@@ -220,7 +220,9 @@ class DocumentCreate(BaseModel):
 
 
 class DocumentStatusUpdate(BaseModel):
-    status: Literal["entwurf", "versendet", "angenommen", "abgelehnt", "bezahlt"]
+    status: Literal[
+        "entwurf", "versendet", "angenommen", "abgelehnt", "bezahlt", "storniert", "archiviert"
+    ]
 
 
 @app.post("/documents")
