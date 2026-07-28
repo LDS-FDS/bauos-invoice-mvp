@@ -66,6 +66,11 @@ _IBAN_LABELED_RE = re.compile(
 
 _IBAN_BARE_RE = re.compile(r"\bDE\d{2}(?:\s?\d{4}){4}\s?\d{2}\b")
 
+_BANK_LABEL_RE = re.compile(
+    r"Bank(?:verbindung)?\s*:\s*([A-ZÄÖÜ][\wÄÖÜäöüß.]*(?:\s+[A-ZÄÖÜ&][\wÄÖÜäöüß.]*){0,1})",
+    re.IGNORECASE,
+)
+
 _BANK_NAME_RE = re.compile(
     r"\b((?:\w*bank\b|sparkasse\b)(?:\s+[A-ZÄÖÜ&][\wÄÖÜäöüß.]*){0,2})",
     re.IGNORECASE,
@@ -175,6 +180,8 @@ def _extract_bank_name(lines: list[str], bank_account: str | None) -> str | None
             # "Bankverbindung: Commerzbank AG" on the line above) - check a
             # small window ending at the IBAN's own line, closest match first.
             for candidate_line in reversed(lines[max(0, i - 2) : i + 1]):
+                if match := _BANK_LABEL_RE.search(candidate_line):
+                    return match.group(1).strip()
                 if match := _BANK_NAME_RE.search(candidate_line):
                     return match.group(1).strip()
     return None
@@ -244,10 +251,10 @@ def parse_invoice_text(text: str) -> InvoiceData:
             skonto_date = match.group(1)
 
     bank_account = None
-    if match := _IBAN_LABELED_RE.search(text):
-        bank_account = match.group(1).replace(" ", "").upper()
-    elif match := _IBAN_BARE_RE.search(text):
+    if match := _IBAN_BARE_RE.search(text):
         bank_account = match.group(0).replace(" ", "").upper()
+    elif match := _IBAN_LABELED_RE.search(text):
+        bank_account = match.group(1).replace(" ", "").upper()
 
     bank_name = _extract_bank_name(lines, bank_account)
 
