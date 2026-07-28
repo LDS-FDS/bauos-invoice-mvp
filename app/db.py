@@ -17,6 +17,7 @@ _COLUMNS = [
     "amount_with_skonto",
     "bank_account",
     "bank_name",
+    "file_path",
 ]
 
 
@@ -60,6 +61,7 @@ def init_db(db_path: Path | None = None) -> None:
             """
         )
         _add_column_if_missing(conn, "invoices", "project_id", "INTEGER REFERENCES projects(id)")
+        _add_column_if_missing(conn, "invoices", "file_path", "TEXT")
         conn.commit()
     finally:
         conn.close()
