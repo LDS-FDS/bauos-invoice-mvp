@@ -164,6 +164,23 @@ def test_bank_name_found_on_line_above_iban():
     assert result.bank_name == "Commerzbank AG"
 
 
+def test_iban_does_not_swallow_trailing_bic_label():
+    text = (
+        "Bank: Musterbank Stuttgart BLZ: 600 501 01 Kto.Nr.: 2043058, "
+        "IBAN: DE33 6005 0101 0002 0430 58 BIC / Swift-Code: MUSTDEST600"
+    )
+    result = parse_invoice_text(text)
+    assert result.bank_account == "DE33600501010002043058"
+    assert result.bank_name == "Musterbank Stuttgart"
+
+
+def test_bank_name_from_bank_colon_label():
+    text = "Bank: LBBW Musterstadt BLZ: 600 501 01, IBAN: DE33 6005 0101 0002 0430 58"
+    result = parse_invoice_text(text)
+    assert result.bank_account == "DE33600501010002043058"
+    assert result.bank_name == "LBBW Musterstadt"
+
+
 def test_due_date_from_ohne_abzug_pattern():
     text = "Bis zum 06.08.2026 ohne Abzug"
     result = parse_invoice_text(text)
