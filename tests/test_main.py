@@ -141,6 +141,24 @@ def test_patch_unknown_invoice_returns_404(client):
     assert response.status_code == 404
 
 
+def test_invoice_status_accepts_storniert_and_archiviert(client):
+    invoice_id = db.save_invoice(SAMPLE_INVOICE)
+
+    storniert = client.patch(f"/invoices/{invoice_id}", json={"status": "storniert"})
+    assert storniert.status_code == 200
+    assert storniert.json()["status"] == "storniert"
+
+    archiviert = client.patch(f"/invoices/{invoice_id}", json={"status": "archiviert"})
+    assert archiviert.status_code == 200
+    assert archiviert.json()["status"] == "archiviert"
+
+
+def test_invoice_status_rejects_invalid_value(client):
+    invoice_id = db.save_invoice(SAMPLE_INVOICE)
+    response = client.patch(f"/invoices/{invoice_id}", json={"status": "unbekannt"})
+    assert response.status_code == 422
+
+
 def test_delete_unknown_invoice_returns_404(client):
     response = client.delete("/invoices/999999")
     assert response.status_code == 404
@@ -320,6 +338,33 @@ def test_get_unknown_document_returns_404(client):
 def test_update_unknown_document_returns_404(client):
     response = client.patch("/documents/9999", json={"status": "angenommen"})
     assert response.status_code == 404
+
+
+def test_document_status_accepts_storniert_and_archiviert(client):
+    customer_id = _create_customer(client)
+    document = client.post(
+        "/documents",
+        json={"doc_type": "rechnung", "customer_id": customer_id, "items": SAMPLE_ITEMS},
+    ).json()
+
+    storniert = client.patch(f"/documents/{document['id']}", json={"status": "storniert"})
+    assert storniert.status_code == 200
+    assert storniert.json()["status"] == "storniert"
+
+    archiviert = client.patch(f"/documents/{document['id']}", json={"status": "archiviert"})
+    assert archiviert.status_code == 200
+    assert archiviert.json()["status"] == "archiviert"
+
+
+def test_document_status_rejects_invalid_value(client):
+    customer_id = _create_customer(client)
+    document = client.post(
+        "/documents",
+        json={"doc_type": "rechnung", "customer_id": customer_id, "items": SAMPLE_ITEMS},
+    ).json()
+
+    response = client.patch(f"/documents/{document['id']}", json={"status": "unbekannt"})
+    assert response.status_code == 422
 
 
 def test_delete_unknown_document_returns_404(client):
