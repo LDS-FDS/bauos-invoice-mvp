@@ -127,6 +127,32 @@ def test_file_paid_invoice_reuses_folder_via_override_when_no_substring_match(tm
     assert not (base / "03 Vertragspartner" / "Possling GmbH & Co.KG").exists()
 
 
+def test_file_paid_invoice_reuses_existing_shorter_supplier_folder(tmp_path):
+    source = tmp_path / "source.pdf"
+    source.write_bytes(b"content")
+
+    base = tmp_path / "1. CIDE"
+    (base / "03 Vertragspartner" / "Wego").mkdir(parents=True)
+    (base / "03 Vertragspartner" / "Telekom").mkdir(parents=True)
+
+    invoice = {
+        "invoice_date": "28.07.2026",
+        "supplier": "Wego Systembaustoffe GmbH",
+        "invoice_number": "909674920",
+        "file_path": str(source),
+    }
+
+    written = invoice_filing.file_paid_invoice(invoice, str(base))
+
+    assert len(written) == 3
+    expected_filename = "260728 INV wego RE-NR. 909674920.pdf"
+    assert (base / "03 Vertragspartner" / "Wego" / expected_filename).exists()
+    assert not (base / "03 Vertragspartner" / "Wego Systembaustoffe GmbH").exists()
+    assert (
+        base / "09 FIBU" / "2026" / "07 Juli 2026" / "01 Eingang" / expected_filename
+    ).exists()
+
+
 def test_file_paid_invoice_creates_new_folder_when_no_match_exists(tmp_path):
     source = tmp_path / "source.pdf"
     source.write_bytes(b"content")

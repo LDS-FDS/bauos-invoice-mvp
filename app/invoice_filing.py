@@ -99,6 +99,10 @@ def _resolve_supplier_folder_name(supplier: str, base_path: str) -> str:
     return override or sanitized
 
 
+def _supplier_name_override(supplier: str) -> str | None:
+    return _SUPPLIER_NAME_OVERRIDES.get(supplier.strip().lower())
+
+
 def file_paid_invoice(invoice: dict, base_path: str | None) -> list[str]:
     source = invoice.get("file_path")
     if not base_path or not source or not os.path.isfile(source):
