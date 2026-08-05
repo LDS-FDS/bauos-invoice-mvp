@@ -30,7 +30,7 @@
 
   main {
     width: 100%;
-    max-width: 900px;
+    max-width: 1240px;
   }
 
   h1 {
@@ -160,9 +160,19 @@
     vertical-align: middle;
   }
 
-  tr.row-overdue td { background: #f7e6e0; }
-  tr.row-skonto td { background: #eaf5f8; }
-  tr.row-paid td { color: var(--text-muted); }
+  .skonto-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    padding: 3px 9px;
+    border-radius: 999px;
+    background: #cdeaf0;
+    color: #1e5a66;
+    white-space: nowrap;
+  }
+  .skonto-tag.urgent { background: #f6c777; color: #6b4a10; }
 
   .badge {
     display: inline-block;
@@ -174,6 +184,8 @@
 
   .badge.offen { background: var(--blue); color: #1e4a55; }
   .badge.bezahlt { background: #d8e6d3; color: #3d5c34; }
+  .badge.storniert { background: #f7e6e0; color: #8a4636; }
+  .badge.archiviert { background: var(--border); color: var(--text-muted); }
 
   .row-actions {
     display: flex;
@@ -267,12 +279,158 @@
     border-radius: 8px;
     font-weight: 600;
     font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
   }
 
   .beleg-sidebar-item:hover:not(:disabled) { background: var(--beige); color: var(--text); }
   .beleg-sidebar-item.active { background: var(--blue); color: #1e4a55; }
 
+  .sidebar-badge {
+    display: inline-block;
+    min-width: 20px;
+    padding: 1px 6px;
+    border-radius: 999px;
+    background: var(--border);
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-align: center;
+  }
+
+  .sidebar-badge.warn { background: #f6c777; color: #6b4a10; }
+  .sidebar-badge.urgent { background: #e79a6d; color: #5a2f12; }
+  .sidebar-badge:empty,
+  .sidebar-badge[data-count="0"] { display: none; }
+
   .beleg-content { flex: 1; min-width: 0; }
+
+  .beleg-detail {
+    flex: 0 0 300px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 18px;
+  }
+
+  .beleg-detail h3 { margin: 0 0 12px; font-size: 1.05rem; }
+
+  .beleg-detail select {
+    width: 100%;
+    margin-top: 4px;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 0.88rem;
+    font-family: inherit;
+    background: var(--card);
+    color: var(--text);
+  }
+
+  .beleg-detail .result-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.88rem;
+  }
+
+  .beleg-detail-pdf {
+    margin-top: 14px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .beleg-detail-pdf iframe {
+    width: 100%;
+    height: 360px;
+    border: none;
+    display: block;
+  }
+
+  .btn-primary-action {
+    width: 100%;
+    margin: 0 0 14px;
+    padding: 11px;
+    background: var(--blue-dark);
+    color: white;
+    border: none;
+    border-radius: 10px;
+    font-weight: 700;
+    font-size: 0.92rem;
+    cursor: pointer;
+  }
+  .btn-primary-action:hover { background: #5a9cae; }
+
+  .beleg-search {
+    width: 100%;
+    margin: 4px 0 16px;
+    padding: 10px 14px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    font-size: 0.9rem;
+    font-family: inherit;
+    background: var(--card);
+    color: var(--text);
+  }
+
+  .beleg-card-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .beleg-card {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    cursor: pointer;
+    background: var(--card);
+  }
+
+  .beleg-card:hover { background: var(--beige); }
+  .beleg-card.card-selected { background: var(--blue); border-color: var(--blue-dark); }
+
+  .beleg-card.row-overdue { background: #f7e6e0; }
+  .beleg-card.row-skonto { background: #eaf5f8; }
+  .beleg-card.row-skonto-urgent { background: #fbe8bf; }
+  .beleg-card.row-paid { color: var(--text-muted); }
+  .beleg-card.card-selected.row-overdue,
+  .beleg-card.card-selected.row-skonto,
+  .beleg-card.card-selected.row-skonto-urgent { background: var(--blue); }
+
+  .beleg-card-main { min-width: 0; flex: 1; }
+  .beleg-card-supplier { font-weight: 700; font-size: 0.95rem; }
+  .beleg-card-meta { color: var(--text-muted); font-size: 0.82rem; margin-top: 2px; }
+  .beleg-card-tags { margin-top: 6px; display: flex; gap: 6px; flex-wrap: wrap; }
+
+  .beleg-card-right {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 6px;
+    flex: 0 0 auto;
+  }
+  .beleg-card-amount { font-weight: 700; white-space: nowrap; }
+
+  .beleg-card-delete {
+    width: auto;
+    margin: 0;
+    padding: 4px 10px;
+    font-size: 0.75rem;
+    background: transparent;
+    border: 1px solid #e0bdb4;
+    color: #b0554a;
+  }
+  .beleg-card-delete:hover { background: #f7e6e0; }
 
   .modal-overlay {
     display: none;
@@ -313,6 +471,41 @@
   }
 
   .modal-close:hover:not(:disabled) { background: var(--beige); color: var(--text); }
+
+  .skonto-reminder-summary {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin: 16px 0;
+  }
+  .skonto-reminder-stat {
+    background: var(--beige);
+    border-radius: 12px;
+    padding: 14px 16px;
+  }
+  .skonto-reminder-stat .label { font-size: 0.78rem; color: var(--text-muted); font-weight: 600; }
+  .skonto-reminder-stat .value { font-size: 1.3rem; font-weight: 700; margin-top: 4px; }
+
+  .skonto-reminder-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 260px;
+    overflow-y: auto;
+  }
+  .skonto-reminder-list li {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 10px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 0.88rem;
+  }
 
   .form-grid {
     display: grid;
@@ -428,40 +621,48 @@
   <div class="tab-panel" data-panel="invoices">
   <div class="beleg-layout">
     <div class="beleg-sidebar" id="invoiceSidebar">
-      <button class="beleg-sidebar-item active" data-filter="alle">Alle</button>
-      <button class="beleg-sidebar-item" data-filter="offene">Offene</button>
-      <button class="beleg-sidebar-item" data-filter="ueberfaellige">Überfällige</button>
-      <button class="beleg-sidebar-item" data-filter="bezahlt">Bezahlt</button>
-      <button class="beleg-sidebar-item" data-filter="storniert">Storniert</button>
-      <button class="beleg-sidebar-item" data-filter="archiviert">Archiviert</button>
+      <button class="btn-primary-action" id="newBelegBtn" type="button">+ Neuer Beleg</button>
+      <button class="beleg-sidebar-item active" data-filter="alle">Alle <span class="sidebar-badge" data-badge="alle"></span></button>
+      <button class="beleg-sidebar-item" data-filter="offene">Offene <span class="sidebar-badge" data-badge="offene"></span></button>
+      <button class="beleg-sidebar-item" data-filter="ueberfaellige">Überfällige <span class="sidebar-badge warn" data-badge="ueberfaellige"></span></button>
+      <button class="beleg-sidebar-item" data-filter="skonto">Skonto läuft ab <span class="sidebar-badge urgent" data-badge="skonto"></span></button>
+      <button class="beleg-sidebar-item" data-filter="bezahlt">Bezahlt <span class="sidebar-badge" data-badge="bezahlt"></span></button>
+      <button class="beleg-sidebar-item" data-filter="storniert">Storniert <span class="sidebar-badge" data-badge="storniert"></span></button>
+      <button class="beleg-sidebar-item" data-filter="archiviert">Archiviert <span class="sidebar-badge" data-badge="archiviert"></span></button>
     </div>
     <div class="beleg-content">
       <div class="card">
         <div class="card-header">
           <h2>Rechnungsliste</h2>
-          <div style="display:flex; gap:8px;">
-            <a class="btn-secondary btn-export" href="/invoices/export/pdf">PDF exportieren</a>
-            <button class="btn-secondary btn-export" id="openInvoiceModalBtn" type="button">+ Rechnung erkennen</button>
-          </div>
+          <a class="btn-secondary btn-export" href="/invoices/export/pdf">PDF exportieren</a>
         </div>
+        <input type="text" id="invoiceSearch" class="beleg-search" placeholder="Suchen nach Lieferant, Rechnungsnummer oder Betrag">
         <div id="invoiceListWrapper">
           <p class="empty-hint" id="emptyHint">Noch keine Rechnungen gespeichert.</p>
-          <table id="invoiceTable" style="display:none">
-            <thead>
-              <tr>
-                <th>Nr.</th>
-                <th>Lieferant</th>
-                <th>Betrag</th>
-                <th>Zahlbar bis</th>
-                <th>Skonto bis</th>
-                <th>Projekt</th>
-                <th>Status</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody id="invoiceTableBody"></tbody>
-          </table>
+          <div id="invoiceList" class="beleg-card-list" style="display:none"></div>
         </div>
+      </div>
+    </div>
+    <div class="beleg-detail" id="invoiceDetailPane">
+      <p class="empty-hint" id="invoiceDetailEmpty">Rechnung auswählen, um Details zu sehen.</p>
+      <div id="invoiceDetailContent" style="display:none">
+        <h3 id="dSupplier">–</h3>
+        <div class="result-row"><span class="result-label">Rechnungsnummer</span><span class="result-value" id="dNumber">–</span></div>
+        <div class="result-row"><span class="result-label">Rechnungsdatum</span><span class="result-value" id="dDate">–</span></div>
+        <div class="result-row"><span class="result-label">Betrag</span><span class="result-value" id="dAmount">–</span></div>
+        <div class="result-row"><span class="result-label">Zahlbar bis</span><span class="result-value" id="dDue">–</span></div>
+        <div class="result-row"><span class="result-label">Skonto</span><span class="result-value" id="dSkonto">–</span></div>
+        <div class="result-row"><span class="result-label">Ersparnis</span><span class="result-value" id="dSavings">–</span></div>
+        <label class="empty-hint" for="dProjectSelect" style="display:block; margin-top:10px;">Projekt</label>
+        <select id="dProjectSelect"></select>
+        <label class="empty-hint" for="dStatusSelect" style="display:block; margin-top:10px;">Status</label>
+        <select id="dStatusSelect"></select>
+        <div id="dFilingInfo" class="status" style="display:none"></div>
+        <div class="beleg-detail-pdf" id="dPdfWrapper" style="display:none">
+          <a id="dPdfOpenLink" class="btn-secondary btn-export" target="_blank" rel="noopener" style="display:block; text-align:center; margin-bottom:8px;">PDF in neuem Tab öffnen</a>
+          <iframe id="dPdfFrame" title="Rechnung PDF"></iframe>
+        </div>
+        <p class="empty-hint" id="dNoPdfHint" style="display:none">Keine PDF-Datei für diese Rechnung gespeichert.</p>
       </div>
     </div>
   </div>
@@ -594,6 +795,25 @@
       </div>
     </div>
   </div>
+  </div>
+
+  <div class="modal-overlay" id="skontoReminderOverlay">
+    <div class="modal-dialog">
+      <button class="modal-close" id="closeSkontoReminderBtn" type="button">×</button>
+      <h2>Skonto-Erinnerung</h2>
+      <p class="empty-hint" id="skontoReminderIntro"></p>
+      <div class="skonto-reminder-summary">
+        <div class="skonto-reminder-stat">
+          <div class="label">Zahlbare Summe (mit Skonto)</div>
+          <div class="value" id="skontoReminderPayable">–</div>
+        </div>
+        <div class="skonto-reminder-stat">
+          <div class="label">Ersparnis durch Skonto</div>
+          <div class="value" id="skontoReminderSavings">–</div>
+        </div>
+      </div>
+      <ul class="skonto-reminder-list" id="skontoReminderList"></ul>
+    </div>
   </div>
 
   <div class="modal-overlay" id="documentModalOverlay">
@@ -805,15 +1025,80 @@
     return today;
   }
 
+  function skontoInfo(invoice) {
+    if (invoice.status !== "offen") return null;
+    const skontoDate = parseGermanDate(invoice.skonto_date);
+    if (!skontoDate) return null;
+    const days = Math.round((skontoDate - startOfToday()) / 86400000);
+    if (days < 0) return null;
+    return { days, skontoDate };
+  }
+
+  function skontoAmountWithDiscount(invoice) {
+    if (invoice.amount_with_skonto != null) return invoice.amount_with_skonto;
+    if (invoice.total_amount != null && invoice.skonto_percent != null) {
+      return invoice.total_amount * (1 - invoice.skonto_percent / 100);
+    }
+    return null;
+  }
+
+  function skontoCellHtml(invoice) {
+    if (!invoice.skonto_date) return "";
+    const info = skontoInfo(invoice);
+    if (!info) return `<span class="skonto-tag">Skonto bis ${invoice.skonto_date}</span>`;
+    const urgent = info.days <= 1;
+    const label = info.days === 0 ? "heute" : info.days === 1 ? "morgen" : `noch ${info.days} Tage`;
+    const percent = invoice.skonto_percent != null ? `${invoice.skonto_percent}% · ` : "";
+    return `<span class="skonto-tag${urgent ? " urgent" : ""}">${percent}${invoice.skonto_date} (${label})</span>`;
+  }
+
   function rowClass(invoice) {
     if (invoice.status === "bezahlt") return "row-paid";
     const today = startOfToday();
     const due = parseGermanDate(invoice.due_date);
     if (due && due < today) return "row-overdue";
-    const skontoDate = parseGermanDate(invoice.skonto_date);
-    if (skontoDate && skontoDate >= today) return "row-skonto";
+    const info = skontoInfo(invoice);
+    if (info) return info.days <= 1 ? "row-skonto-urgent" : "row-skonto";
     return "";
   }
+
+  function checkSkontoReminder() {
+    const todayKey = new Date().toISOString().slice(0, 10);
+    if (localStorage.getItem("skontoReminderShown") === todayKey) return;
+
+    const due = allInvoices
+      .map((inv) => ({ inv, info: skontoInfo(inv) }))
+      .filter(({ info }) => info && info.days <= 1);
+
+    if (due.length === 0) return;
+
+    let payable = 0;
+    let savings = 0;
+    const listEl = document.getElementById("skontoReminderList");
+    listEl.innerHTML = "";
+    for (const { inv } of due) {
+      const amountWithSkonto = skontoAmountWithDiscount(inv);
+      if (amountWithSkonto != null) {
+        payable += amountWithSkonto;
+        if (inv.total_amount != null) savings += inv.total_amount - amountWithSkonto;
+      }
+      const li = document.createElement("li");
+      li.innerHTML = `<span>${inv.supplier || "–"} · ${inv.invoice_number || "–"}</span><span>${amountWithSkonto != null ? formatEuro(amountWithSkonto) : "–"} bis ${inv.skonto_date}</span>`;
+      listEl.appendChild(li);
+    }
+
+    document.getElementById("skontoReminderIntro").textContent =
+      `${due.length} Rechnung${due.length === 1 ? "" : "en"} mit Skonto ${due.length === 1 ? "läuft" : "laufen"} heute oder morgen ab.`;
+    document.getElementById("skontoReminderPayable").textContent = formatEuro(payable);
+    document.getElementById("skontoReminderSavings").textContent = formatEuro(savings);
+
+    document.getElementById("skontoReminderOverlay").classList.add("open");
+    localStorage.setItem("skontoReminderShown", todayKey);
+  }
+
+  document.getElementById("closeSkontoReminderBtn").addEventListener("click", () => {
+    document.getElementById("skontoReminderOverlay").classList.remove("open");
+  });
 
   const INVOICE_STATUS_OPTIONS = ["offen", "bezahlt", "storniert", "archiviert"];
 
@@ -824,7 +1109,22 @@
     const today = startOfToday();
     const due = parseGermanDate(invoice.due_date);
     if (due && due < today) return "ueberfaellige";
+    if (skontoInfo(invoice)) return "skonto";
     return "offene";
+  }
+
+  function renderSidebarBadges() {
+    const counts = { alle: allInvoices.length, offene: 0, ueberfaellige: 0, skonto: 0, bezahlt: 0, storniert: 0, archiviert: 0 };
+    for (const invoice of allInvoices) {
+      const category = computeInvoiceCategory(invoice);
+      counts[category] = (counts[category] || 0) + 1;
+    }
+    document.querySelectorAll('#invoiceSidebar .sidebar-badge').forEach((el) => {
+      const key = el.dataset.badge;
+      const count = counts[key] || 0;
+      el.textContent = count > 0 ? String(count) : "";
+      el.dataset.count = String(count);
+    });
   }
 
   async function deleteInvoice(id) {
@@ -834,6 +1134,7 @@
 
   let allInvoices = [];
   let invoiceFilter = "alle";
+  let invoiceSearchTerm = "";
 
   async function loadInvoices() {
     const response = await fetch("/invoices");
@@ -841,80 +1142,182 @@
     renderInvoiceTable();
   }
 
-  function renderInvoiceTable() {
-    const table = document.getElementById("invoiceTable");
-    const emptyHint = document.getElementById("emptyHint");
-    const tbody = document.getElementById("invoiceTableBody");
-    tbody.innerHTML = "";
+  function matchesSearch(invoice, term) {
+    if (!term) return true;
+    const haystack = `${invoice.supplier || ""} ${invoice.invoice_number || ""} ${invoice.total_amount ?? ""}`.toLowerCase();
+    return haystack.includes(term);
+  }
 
-    const invoices =
-      invoiceFilter === "alle"
-        ? allInvoices
-        : allInvoices.filter((inv) => computeInvoiceCategory(inv) === invoiceFilter);
+  function renderInvoiceTable() {
+    const emptyHint = document.getElementById("emptyHint");
+    const list = document.getElementById("invoiceList");
+    list.innerHTML = "";
+
+    renderSidebarBadges();
+
+    const term = invoiceSearchTerm.trim().toLowerCase();
+    const invoices = allInvoices
+      .filter((inv) => invoiceFilter === "alle" || computeInvoiceCategory(inv) === invoiceFilter)
+      .filter((inv) => matchesSearch(inv, term));
 
     if (invoices.length === 0) {
-      table.style.display = "none";
+      list.style.display = "none";
       emptyHint.style.display = "block";
+      emptyHint.textContent = allInvoices.length === 0
+        ? "Noch keine Rechnungen gespeichert."
+        : "Keine Rechnungen für diese Auswahl.";
+      if (selectedInvoiceId != null) clearInvoiceDetail();
       return;
     }
-    table.style.display = "table";
+    list.style.display = "flex";
     emptyHint.style.display = "none";
 
     for (const invoice of invoices) {
-      const tr = document.createElement("tr");
-      tr.className = rowClass(invoice);
+      const card = document.createElement("div");
+      card.className = `beleg-card ${rowClass(invoice)}`;
+      if (invoice.id === selectedInvoiceId) card.classList.add("card-selected");
+      card.dataset.id = invoice.id;
 
       const amount = invoice.total_amount != null
         ? `${invoice.total_amount} ${invoice.currency || ""}`.trim()
         : "–";
-      const statusOptionsHtml = INVOICE_STATUS_OPTIONS.map(
-        (s) => `<option value="${s}" ${s === invoice.status ? "selected" : ""}>${s}</option>`
-      ).join("");
+      const dueText = invoice.due_date ? `Zahlbar bis ${invoice.due_date}` : "";
 
-      tr.innerHTML = `
-        <td>${invoice.invoice_number || "–"}</td>
-        <td>${invoice.supplier || "–"}</td>
-        <td>${amount}</td>
-        <td>${invoice.due_date || "–"}</td>
-        <td>${invoice.skonto_date || "–"}</td>
-        <td><select class="invoice-project-select" data-id="${invoice.id}">${projectOptionsHtml(invoice.project_id)}</select></td>
-        <td><select class="invoice-status-select" data-id="${invoice.id}">${statusOptionsHtml}</select></td>
-        <td class="row-actions">
-          <button class="btn-danger" data-action="delete" data-id="${invoice.id}">Löschen</button>
-        </td>
+      card.innerHTML = `
+        <div class="beleg-card-main">
+          <div class="beleg-card-supplier">${invoice.supplier || "–"}</div>
+          <div class="beleg-card-meta">${invoice.invoice_number || "–"} · vom ${invoice.invoice_date || "–"}${dueText ? " · " + dueText : ""}</div>
+          <div class="beleg-card-tags">${skontoCellHtml(invoice)}</div>
+        </div>
+        <div class="beleg-card-right">
+          <div class="beleg-card-amount">${amount}</div>
+          <span class="badge ${invoice.status}">${invoice.status}</span>
+          <button class="btn-danger beleg-card-delete" data-action="delete" data-id="${invoice.id}">Löschen</button>
+        </div>
       `;
-      tbody.appendChild(tr);
+      list.appendChild(card);
+    }
+
+    if (selectedInvoiceId != null) {
+      const stillThere = invoices.some((inv) => inv.id === selectedInvoiceId);
+      if (stillThere) updateInvoiceDetail(selectedInvoiceId);
+      else clearInvoiceDetail();
     }
   }
 
-  document.getElementById("invoiceTableBody").addEventListener("change", async (e) => {
-    if (e.target.classList.contains("invoice-project-select")) {
-      const projectId = e.target.value ? parseInt(e.target.value, 10) : null;
-      await fetch(`/invoices/${e.target.dataset.id}/project`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ project_id: projectId }),
-      });
-    } else if (e.target.classList.contains("invoice-status-select")) {
-      const response = await fetch(`/invoices/${e.target.dataset.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: e.target.value }),
-      });
-      const updated = await response.json();
-      if (updated.filing_warning) {
-        alert(updated.filing_warning);
-      }
-      await loadInvoices();
+  let selectedInvoiceId = null;
+
+  function clearInvoiceDetail() {
+    selectedInvoiceId = null;
+    document.getElementById("invoiceDetailEmpty").style.display = "block";
+    document.getElementById("invoiceDetailContent").style.display = "none";
+  }
+
+  function updateInvoiceDetail(id) {
+    const invoice = allInvoices.find((inv) => inv.id === id);
+    if (!invoice) return clearInvoiceDetail();
+    selectedInvoiceId = id;
+
+    document.getElementById("invoiceDetailEmpty").style.display = "none";
+    document.getElementById("invoiceDetailContent").style.display = "block";
+
+    document.getElementById("dSupplier").textContent = invoice.supplier || "–";
+    document.getElementById("dNumber").textContent = invoice.invoice_number || "–";
+    document.getElementById("dDate").textContent = invoice.invoice_date || "–";
+    document.getElementById("dAmount").textContent = invoice.total_amount != null
+      ? `${invoice.total_amount} ${invoice.currency || ""}`.trim()
+      : "–";
+    document.getElementById("dDue").textContent = invoice.due_date || "–";
+
+    const info = skontoInfo(invoice);
+    if (invoice.skonto_date) {
+      const percent = invoice.skonto_percent != null ? `${invoice.skonto_percent}% · ` : "";
+      const label = info ? (info.days === 0 ? " (heute)" : info.days === 1 ? " (morgen)" : ` (noch ${info.days} Tage)`) : "";
+      document.getElementById("dSkonto").textContent = `${percent}${invoice.skonto_date}${label}`;
+    } else {
+      document.getElementById("dSkonto").textContent = "–";
+    }
+
+    const amountWithSkonto = skontoAmountWithDiscount(invoice);
+    document.getElementById("dSavings").textContent =
+      amountWithSkonto != null && invoice.total_amount != null
+        ? formatEuro(invoice.total_amount - amountWithSkonto)
+        : "–";
+
+    const dProjectSelect = document.getElementById("dProjectSelect");
+    dProjectSelect.dataset.id = invoice.id;
+    dProjectSelect.innerHTML = projectOptionsHtml(invoice.project_id);
+
+    const dStatusSelect = document.getElementById("dStatusSelect");
+    dStatusSelect.dataset.id = invoice.id;
+    dStatusSelect.innerHTML = INVOICE_STATUS_OPTIONS.map(
+      (s) => `<option value="${s}" ${s === invoice.status ? "selected" : ""}>${s}</option>`
+    ).join("");
+
+    document.getElementById("dFilingInfo").style.display = "none";
+
+    const pdfWrapper = document.getElementById("dPdfWrapper");
+    const noPdfHint = document.getElementById("dNoPdfHint");
+    if (invoice.file_path) {
+      const fileUrl = `/invoices/${invoice.id}/file`;
+      document.getElementById("dPdfFrame").src = fileUrl;
+      document.getElementById("dPdfOpenLink").href = fileUrl;
+      pdfWrapper.style.display = "block";
+      noPdfHint.style.display = "none";
+    } else {
+      pdfWrapper.style.display = "none";
+      noPdfHint.style.display = "block";
+    }
+  }
+
+  document.getElementById("dProjectSelect").addEventListener("change", async (e) => {
+    const projectId = e.target.value ? parseInt(e.target.value, 10) : null;
+    await fetch(`/invoices/${e.target.dataset.id}/project`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ project_id: projectId }),
+    });
+    await loadInvoices();
+  });
+
+  document.getElementById("dStatusSelect").addEventListener("change", async (e) => {
+    const newStatus = e.target.value;
+    const response = await fetch(`/invoices/${e.target.dataset.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: newStatus }),
+    });
+    const updated = await response.json();
+    await loadInvoices();
+
+    const filingInfo = document.getElementById("dFilingInfo");
+    if (updated.filing_warning) {
+      filingInfo.textContent = updated.filing_warning;
+      filingInfo.className = "status error";
+      filingInfo.style.display = "block";
+    } else if (newStatus === "bezahlt") {
+      filingInfo.textContent = "In die 3 Dropbox-Ordner abgelegt.";
+      filingInfo.className = "status";
+      filingInfo.style.display = "block";
     }
   });
 
-  document.getElementById("invoiceTableBody").addEventListener("click", (e) => {
+  document.getElementById("invoiceList").addEventListener("click", (e) => {
     const btn = e.target.closest("button");
-    if (!btn) return;
-    if (btn.dataset.action === "delete") {
-      deleteInvoice(btn.dataset.id);
+    if (btn) {
+      if (btn.dataset.action === "delete") deleteInvoice(btn.dataset.id);
+      return;
     }
+    const card = e.target.closest(".beleg-card");
+    if (!card) return;
+    document.querySelectorAll("#invoiceList .beleg-card.card-selected").forEach((c) => c.classList.remove("card-selected"));
+    card.classList.add("card-selected");
+    updateInvoiceDetail(parseInt(card.dataset.id, 10));
+  });
+
+  document.getElementById("invoiceSearch").addEventListener("input", (e) => {
+    invoiceSearchTerm = e.target.value;
+    renderInvoiceTable();
   });
 
   wireSidebar("invoiceSidebar", (filter) => {
@@ -922,7 +1325,7 @@
     renderInvoiceTable();
   });
 
-  loadInvoices();
+  loadInvoices().then(checkSkontoReminder);
 
   // --- Tabs ---
   document.querySelectorAll(".tab-btn").forEach((btn) => {
@@ -948,7 +1351,7 @@
     return overlay;
   }
 
-  const invoiceModalOverlay = wireModal("openInvoiceModalBtn", "closeInvoiceModalBtn", "invoiceModalOverlay");
+  const invoiceModalOverlay = wireModal("newBelegBtn", "closeInvoiceModalBtn", "invoiceModalOverlay");
   const documentModalOverlay = wireModal("openDocumentModalBtn", "closeDocumentModalBtn", "documentModalOverlay");
 
   document.addEventListener("keydown", (e) => {

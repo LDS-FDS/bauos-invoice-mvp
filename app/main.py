@@ -140,6 +140,17 @@ def update_invoice_status(invoice_id: int, body: StatusUpdate) -> dict:
     return invoice
 
 
+@app.get("/invoices/{invoice_id}/file")
+def get_invoice_file(invoice_id: int) -> FileResponse:
+    invoice = db.get_invoice(invoice_id)
+    if invoice is None:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    file_path = invoice.get("file_path")
+    if not file_path or not Path(file_path).is_file():
+        raise HTTPException(status_code=404, detail="No file stored for this invoice")
+    return FileResponse(file_path, media_type="application/pdf")
+
+
 @app.delete("/invoices/{invoice_id}")
 def delete_invoice(invoice_id: int) -> dict:
     if not db.delete_invoice(invoice_id):
