@@ -1,0 +1,525 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BauOS – Belege</title>
+<link rel="stylesheet" href="/assets/style.css?v=2">
+</head>
+<body>
+<div id="appNav"></div>
+<main>
+  <h1>Belege</h1>
+  <p class="subtitle">Eingehende Rechnungen erkennen, verwalten und ablegen.</p>
+
+  <div class="beleg-layout">
+    <div class="beleg-sidebar" id="invoiceSidebar">
+      <button class="btn-primary-action" id="newBelegBtn" type="button">+ Neuer Beleg</button>
+      <button class="beleg-sidebar-item active" data-filter="alle">Alle <span class="sidebar-badge" data-badge="alle"></span></button>
+      <button class="beleg-sidebar-item" data-filter="offene">Offene <span class="sidebar-badge" data-badge="offene"></span></button>
+      <button class="beleg-sidebar-item" data-filter="ueberfaellige">Überfällige <span class="sidebar-badge warn" data-badge="ueberfaellige"></span></button>
+      <button class="beleg-sidebar-item" data-filter="skonto">Skonto läuft ab <span class="sidebar-badge urgent" data-badge="skonto"></span></button>
+      <button class="beleg-sidebar-item" data-filter="bezahlt">Bezahlt <span class="sidebar-badge" data-badge="bezahlt"></span></button>
+      <button class="beleg-sidebar-item" data-filter="storniert">Storniert <span class="sidebar-badge" data-badge="storniert"></span></button>
+      <button class="beleg-sidebar-item" data-filter="archiviert">Archiviert <span class="sidebar-badge" data-badge="archiviert"></span></button>
+    </div>
+    <div class="beleg-content">
+      <div class="card">
+        <div class="card-header">
+          <h2>Rechnungsliste</h2>
+          <a class="btn-secondary btn-export" href="/invoices/export/pdf">PDF exportieren</a>
+        </div>
+        <input type="text" id="invoiceSearch" class="beleg-search" placeholder="Suchen nach Lieferant, Rechnungsnummer oder Betrag">
+        <div id="invoiceListWrapper">
+          <p class="empty-hint" id="emptyHint">Noch keine Rechnungen gespeichert.</p>
+          <div id="invoiceList" class="beleg-card-list" style="display:none"></div>
+        </div>
+      </div>
+    </div>
+    <div class="beleg-detail" id="invoiceDetailPane">
+      <p class="empty-hint" id="invoiceDetailEmpty">Rechnung auswählen, um Details zu sehen.</p>
+      <div id="invoiceDetailContent" style="display:none">
+        <h3 id="dSupplier">–</h3>
+        <div class="result-row"><span class="result-label">Rechnungsnummer</span><span class="result-value" id="dNumber">–</span></div>
+        <div class="result-row"><span class="result-label">Rechnungsdatum</span><span class="result-value" id="dDate">–</span></div>
+        <div class="result-row"><span class="result-label">Betrag</span><span class="result-value" id="dAmount">–</span></div>
+        <div class="result-row"><span class="result-label">Zahlbar bis</span><span class="result-value" id="dDue">–</span></div>
+        <div class="result-row"><span class="result-label">Skonto</span><span class="result-value" id="dSkonto">–</span></div>
+        <div class="result-row"><span class="result-label">Ersparnis</span><span class="result-value" id="dSavings">–</span></div>
+        <label class="empty-hint" for="dProjectSelect" style="display:block; margin-top:10px;">Projekt</label>
+        <select id="dProjectSelect"></select>
+        <label class="empty-hint" for="dStatusSelect" style="display:block; margin-top:10px;">Status</label>
+        <select id="dStatusSelect"></select>
+        <div id="dFilingInfo" class="status" style="display:none"></div>
+        <div class="beleg-detail-pdf" id="dPdfWrapper" style="display:none">
+          <a id="dPdfOpenLink" class="btn-secondary btn-export" target="_blank" rel="noopener" style="display:block; text-align:center; margin-bottom:8px;">PDF in neuem Tab öffnen</a>
+          <iframe id="dPdfFrame" title="Rechnung PDF"></iframe>
+        </div>
+        <p class="empty-hint" id="dNoPdfHint" style="display:none">Keine PDF-Datei für diese Rechnung gespeichert.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="invoiceModalOverlay">
+    <div class="modal-dialog">
+      <button class="modal-close" id="closeInvoiceModalBtn" type="button">×</button>
+      <h2>Rechnung erkennen</h2>
+      <label class="dropzone" id="dropzone">
+        <div id="dropzoneText">
+          <strong>PDF-Rechnung auswählen</strong>
+          <p>oder hierher ziehen</p>
+        </div>
+        <span id="fileName"></span>
+        <input type="file" id="fileInput" accept="application/pdf">
+      </label>
+      <button id="submitBtn" disabled>Rechnung analysieren</button>
+      <div id="status" class="status"></div>
+
+      <div class="card" id="resultCard" style="display:none; margin-top:16px;">
+        <div class="result-row"><span class="result-label">Lieferant</span><span class="result-value" id="r-supplier">–</span></div>
+        <div class="result-row"><span class="result-label">Rechnungsnummer</span><span class="result-value" id="r-invoice-number">–</span></div>
+        <div class="result-row"><span class="result-label">Rechnungsdatum</span><span class="result-value" id="r-invoice-date">–</span></div>
+        <div class="result-row"><span class="result-label">Gesamtbetrag</span><span class="result-value" id="r-amount">–</span></div>
+        <div class="result-row"><span class="result-label">Zahlbar bis</span><span class="result-value" id="r-due">–</span></div>
+        <div class="result-row"><span class="result-label">Skonto</span><span class="result-value" id="r-skonto">–</span></div>
+        <div class="result-row"><span class="result-label">Rechnungsbetrag mit Skonto</span><span class="result-value" id="r-amount-skonto">–</span></div>
+        <div class="result-row"><span class="result-label">Zahlbar bis mit Skonto</span><span class="result-value" id="r-due-skonto">–</span></div>
+        <div class="result-row"><span class="result-label">IBAN</span><span class="result-value" id="r-account">–</span></div>
+        <div class="result-row"><span class="result-label">Bank</span><span class="result-value" id="r-bank">–</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="skontoReminderOverlay">
+    <div class="modal-dialog">
+      <button class="modal-close" id="closeSkontoReminderBtn" type="button">×</button>
+      <h2>Skonto-Erinnerung</h2>
+      <p class="empty-hint" id="skontoReminderIntro"></p>
+      <div class="skonto-reminder-summary">
+        <div class="skonto-reminder-stat">
+          <div class="label">Zahlbare Summe (mit Skonto)</div>
+          <div class="value" id="skontoReminderPayable">–</div>
+        </div>
+        <div class="skonto-reminder-stat">
+          <div class="label">Ersparnis durch Skonto</div>
+          <div class="value" id="skontoReminderSavings">–</div>
+        </div>
+      </div>
+      <ul class="skonto-reminder-list" id="skontoReminderList"></ul>
+    </div>
+  </div>
+</main>
+
+<script src="/assets/common.js?v=2"></script>
+<script>
+  renderNav("/belege");
+
+  let allProjects = [];
+
+  async function refreshProjectsCache() {
+    allProjects = await (await fetch("/projects")).json();
+  }
+
+  function projectOptionsHtml(selectedId) {
+    const options = allProjects
+      .map(
+        (p) =>
+          `<option value="${p.id}" ${p.id === selectedId ? "selected" : ""}>${p.name}</option>`
+      )
+      .join("");
+    return `<option value="">–</option>${options}`;
+  }
+
+  const dropzone = document.getElementById("dropzone");
+  const fileInput = document.getElementById("fileInput");
+  const fileName = document.getElementById("fileName");
+  const submitBtn = document.getElementById("submitBtn");
+  const statusEl = document.getElementById("status");
+  const resultCard = document.getElementById("resultCard");
+
+  let selectedFile = null;
+
+  function setFile(file) {
+    if (!file) return;
+    selectedFile = file;
+    fileName.textContent = file.name;
+    submitBtn.disabled = false;
+    statusEl.textContent = "";
+    statusEl.className = "status";
+  }
+
+  fileInput.addEventListener("change", () => setFile(fileInput.files[0]));
+
+  dropzone.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    dropzone.classList.add("dragover");
+  });
+  dropzone.addEventListener("dragleave", () => dropzone.classList.remove("dragover"));
+  dropzone.addEventListener("drop", (e) => {
+    e.preventDefault();
+    dropzone.classList.remove("dragover");
+    setFile(e.dataTransfer.files[0]);
+  });
+
+  function formatValue(value, suffix = "") {
+    return value === null || value === undefined || value === "" ? "–" : `${value}${suffix}`;
+  }
+
+  submitBtn.addEventListener("click", async () => {
+    if (!selectedFile) return;
+
+    submitBtn.disabled = true;
+    statusEl.textContent = "Wird analysiert …";
+    statusEl.className = "status loading";
+    resultCard.style.display = "none";
+
+    const formData = new FormData();
+    formData.append("file", selectedFile);
+
+    try {
+      const response = await fetch("/invoices/parse", { method: "POST", body: formData });
+      if (!response.ok) {
+        const detail = await response.json().catch(() => ({}));
+        throw new Error(detail.detail || `Fehler ${response.status}`);
+      }
+      const data = await response.json();
+
+      document.getElementById("r-supplier").textContent = formatValue(data.supplier);
+      document.getElementById("r-invoice-number").textContent = formatValue(data.invoice_number);
+      document.getElementById("r-invoice-date").textContent = formatValue(data.invoice_date);
+      document.getElementById("r-amount").textContent =
+        data.total_amount != null ? `${data.total_amount} ${data.currency || ""}`.trim() : "–";
+      document.getElementById("r-due").textContent = formatValue(data.due_date);
+      document.getElementById("r-skonto").textContent =
+        data.skonto_percent != null ? `${data.skonto_percent}%` : "–";
+      document.getElementById("r-amount-skonto").textContent =
+        data.amount_with_skonto != null
+          ? `${data.amount_with_skonto} ${data.currency || ""}`.trim()
+          : "–";
+      document.getElementById("r-due-skonto").textContent = formatValue(data.skonto_date);
+      document.getElementById("r-account").textContent = formatValue(data.bank_account);
+      document.getElementById("r-bank").textContent = formatValue(data.bank_name);
+
+      resultCard.style.display = "block";
+      statusEl.textContent = "";
+      await loadInvoices();
+    } catch (err) {
+      statusEl.textContent = err.message || "Etwas ist schiefgelaufen.";
+      statusEl.className = "status error";
+    } finally {
+      submitBtn.disabled = false;
+    }
+  });
+
+  function skontoInfo(invoice) {
+    if (invoice.status !== "offen") return null;
+    const skontoDate = parseGermanDate(invoice.skonto_date);
+    if (!skontoDate) return null;
+    const days = Math.round((skontoDate - startOfToday()) / 86400000);
+    if (days < 0) return null;
+    return { days, skontoDate };
+  }
+
+  function skontoAmountWithDiscount(invoice) {
+    if (invoice.amount_with_skonto != null) return invoice.amount_with_skonto;
+    if (invoice.total_amount != null && invoice.skonto_percent != null) {
+      return invoice.total_amount * (1 - invoice.skonto_percent / 100);
+    }
+    return null;
+  }
+
+  function skontoCellHtml(invoice) {
+    if (!invoice.skonto_date) return "";
+    const info = skontoInfo(invoice);
+    if (!info) return `<span class="skonto-tag">Skonto bis ${invoice.skonto_date}</span>`;
+    const urgent = info.days <= 1;
+    const label = info.days === 0 ? "heute" : info.days === 1 ? "morgen" : `noch ${info.days} Tage`;
+    const percent = invoice.skonto_percent != null ? `${invoice.skonto_percent}% · ` : "";
+    return `<span class="skonto-tag${urgent ? " urgent" : ""}">${percent}${invoice.skonto_date} (${label})</span>`;
+  }
+
+  function rowClass(invoice) {
+    if (invoice.status === "bezahlt") return "row-paid";
+    const today = startOfToday();
+    const due = parseGermanDate(invoice.due_date);
+    if (due && due < today) return "row-overdue";
+    const info = skontoInfo(invoice);
+    if (info) return info.days <= 1 ? "row-skonto-urgent" : "row-skonto";
+    return "";
+  }
+
+  function checkSkontoReminder() {
+    const todayKey = new Date().toISOString().slice(0, 10);
+    if (localStorage.getItem("skontoReminderShown") === todayKey) return;
+
+    const due = allInvoices
+      .map((inv) => ({ inv, info: skontoInfo(inv) }))
+      .filter(({ info }) => info && info.days <= 1);
+
+    if (due.length === 0) return;
+
+    let payable = 0;
+    let savings = 0;
+    const listEl = document.getElementById("skontoReminderList");
+    listEl.innerHTML = "";
+    for (const { inv } of due) {
+      const amountWithSkonto = skontoAmountWithDiscount(inv);
+      if (amountWithSkonto != null) {
+        payable += amountWithSkonto;
+        if (inv.total_amount != null) savings += inv.total_amount - amountWithSkonto;
+      }
+      const li = document.createElement("li");
+      li.innerHTML = `<span>${inv.supplier || "–"} · ${inv.invoice_number || "–"}</span><span>${amountWithSkonto != null ? formatEuro(amountWithSkonto) : "–"} bis ${inv.skonto_date}</span>`;
+      listEl.appendChild(li);
+    }
+
+    document.getElementById("skontoReminderIntro").textContent =
+      `${due.length} Rechnung${due.length === 1 ? "" : "en"} mit Skonto ${due.length === 1 ? "läuft" : "laufen"} heute oder morgen ab.`;
+    document.getElementById("skontoReminderPayable").textContent = formatEuro(payable);
+    document.getElementById("skontoReminderSavings").textContent = formatEuro(savings);
+
+    document.getElementById("skontoReminderOverlay").classList.add("open");
+    localStorage.setItem("skontoReminderShown", todayKey);
+  }
+
+  document.getElementById("closeSkontoReminderBtn").addEventListener("click", () => {
+    document.getElementById("skontoReminderOverlay").classList.remove("open");
+  });
+
+  const INVOICE_STATUS_OPTIONS = ["offen", "bezahlt", "storniert", "archiviert"];
+
+  function computeInvoiceCategory(invoice) {
+    if (invoice.status === "storniert") return "storniert";
+    if (invoice.status === "archiviert") return "archiviert";
+    if (invoice.status === "bezahlt") return "bezahlt";
+    const today = startOfToday();
+    const due = parseGermanDate(invoice.due_date);
+    if (due && due < today) return "ueberfaellige";
+    if (skontoInfo(invoice)) return "skonto";
+    return "offene";
+  }
+
+  function renderSidebarBadges() {
+    const counts = { alle: allInvoices.length, offene: 0, ueberfaellige: 0, skonto: 0, bezahlt: 0, storniert: 0, archiviert: 0 };
+    for (const invoice of allInvoices) {
+      const category = computeInvoiceCategory(invoice);
+      counts[category] = (counts[category] || 0) + 1;
+    }
+    document.querySelectorAll('#invoiceSidebar .sidebar-badge').forEach((el) => {
+      const key = el.dataset.badge;
+      const count = counts[key] || 0;
+      el.textContent = count > 0 ? String(count) : "";
+      el.dataset.count = String(count);
+    });
+  }
+
+  async function deleteInvoice(id) {
+    await fetch(`/invoices/${id}`, { method: "DELETE" });
+    await loadInvoices();
+  }
+
+  let allInvoices = [];
+  let invoiceFilter = "alle";
+  let invoiceSearchTerm = "";
+
+  async function loadInvoices() {
+    const response = await fetch("/invoices");
+    allInvoices = await response.json();
+    renderInvoiceTable();
+  }
+
+  function matchesSearch(invoice, term) {
+    if (!term) return true;
+    const haystack = `${invoice.supplier || ""} ${invoice.invoice_number || ""} ${invoice.total_amount ?? ""}`.toLowerCase();
+    return haystack.includes(term);
+  }
+
+  function renderInvoiceTable() {
+    const emptyHint = document.getElementById("emptyHint");
+    const list = document.getElementById("invoiceList");
+    list.innerHTML = "";
+
+    renderSidebarBadges();
+
+    const term = invoiceSearchTerm.trim().toLowerCase();
+    const invoices = allInvoices
+      .filter((inv) => invoiceFilter === "alle" || computeInvoiceCategory(inv) === invoiceFilter)
+      .filter((inv) => matchesSearch(inv, term));
+
+    if (invoices.length === 0) {
+      list.style.display = "none";
+      emptyHint.style.display = "block";
+      emptyHint.textContent = allInvoices.length === 0
+        ? "Noch keine Rechnungen gespeichert."
+        : "Keine Rechnungen für diese Auswahl.";
+      if (selectedInvoiceId != null) clearInvoiceDetail();
+      return;
+    }
+    list.style.display = "flex";
+    emptyHint.style.display = "none";
+
+    for (const invoice of invoices) {
+      const card = document.createElement("div");
+      card.className = `beleg-card ${rowClass(invoice)}`;
+      if (invoice.id === selectedInvoiceId) card.classList.add("card-selected");
+      card.dataset.id = invoice.id;
+
+      const amount = invoice.total_amount != null
+        ? `${invoice.total_amount} ${invoice.currency || ""}`.trim()
+        : "–";
+      const dueText = invoice.due_date ? `Zahlbar bis ${invoice.due_date}` : "";
+
+      card.innerHTML = `
+        <div class="beleg-card-main">
+          <div class="beleg-card-supplier">${invoice.supplier || "–"}</div>
+          <div class="beleg-card-meta">${invoice.invoice_number || "–"} · vom ${invoice.invoice_date || "–"}${dueText ? " · " + dueText : ""}</div>
+          <div class="beleg-card-tags">${skontoCellHtml(invoice)}</div>
+        </div>
+        <div class="beleg-card-right">
+          <div class="beleg-card-amount">${amount}</div>
+          <span class="badge ${invoice.status}">${invoice.status}</span>
+          <button class="btn-danger beleg-card-delete" data-action="delete" data-id="${invoice.id}">Löschen</button>
+        </div>
+      `;
+      list.appendChild(card);
+    }
+
+    if (selectedInvoiceId != null) {
+      const stillThere = invoices.some((inv) => inv.id === selectedInvoiceId);
+      if (stillThere) updateInvoiceDetail(selectedInvoiceId);
+      else clearInvoiceDetail();
+    }
+  }
+
+  let selectedInvoiceId = null;
+
+  function clearInvoiceDetail() {
+    selectedInvoiceId = null;
+    document.getElementById("invoiceDetailEmpty").style.display = "block";
+    document.getElementById("invoiceDetailContent").style.display = "none";
+  }
+
+  function updateInvoiceDetail(id) {
+    const invoice = allInvoices.find((inv) => inv.id === id);
+    if (!invoice) return clearInvoiceDetail();
+    selectedInvoiceId = id;
+
+    document.getElementById("invoiceDetailEmpty").style.display = "none";
+    document.getElementById("invoiceDetailContent").style.display = "block";
+
+    document.getElementById("dSupplier").textContent = invoice.supplier || "–";
+    document.getElementById("dNumber").textContent = invoice.invoice_number || "–";
+    document.getElementById("dDate").textContent = invoice.invoice_date || "–";
+    document.getElementById("dAmount").textContent = invoice.total_amount != null
+      ? `${invoice.total_amount} ${invoice.currency || ""}`.trim()
+      : "–";
+    document.getElementById("dDue").textContent = invoice.due_date || "–";
+
+    const info = skontoInfo(invoice);
+    if (invoice.skonto_date) {
+      const percent = invoice.skonto_percent != null ? `${invoice.skonto_percent}% · ` : "";
+      const label = info ? (info.days === 0 ? " (heute)" : info.days === 1 ? " (morgen)" : ` (noch ${info.days} Tage)`) : "";
+      document.getElementById("dSkonto").textContent = `${percent}${invoice.skonto_date}${label}`;
+    } else {
+      document.getElementById("dSkonto").textContent = "–";
+    }
+
+    const amountWithSkonto = skontoAmountWithDiscount(invoice);
+    document.getElementById("dSavings").textContent =
+      amountWithSkonto != null && invoice.total_amount != null
+        ? formatEuro(invoice.total_amount - amountWithSkonto)
+        : "–";
+
+    const dProjectSelect = document.getElementById("dProjectSelect");
+    dProjectSelect.dataset.id = invoice.id;
+    dProjectSelect.innerHTML = projectOptionsHtml(invoice.project_id);
+
+    const dStatusSelect = document.getElementById("dStatusSelect");
+    dStatusSelect.dataset.id = invoice.id;
+    dStatusSelect.innerHTML = INVOICE_STATUS_OPTIONS.map(
+      (s) => `<option value="${s}" ${s === invoice.status ? "selected" : ""}>${s}</option>`
+    ).join("");
+
+    document.getElementById("dFilingInfo").style.display = "none";
+
+    const pdfWrapper = document.getElementById("dPdfWrapper");
+    const noPdfHint = document.getElementById("dNoPdfHint");
+    if (invoice.file_path) {
+      const fileUrl = `/invoices/${invoice.id}/file`;
+      document.getElementById("dPdfFrame").src = fileUrl;
+      document.getElementById("dPdfOpenLink").href = fileUrl;
+      pdfWrapper.style.display = "block";
+      noPdfHint.style.display = "none";
+    } else {
+      pdfWrapper.style.display = "none";
+      noPdfHint.style.display = "block";
+    }
+  }
+
+  document.getElementById("dProjectSelect").addEventListener("change", async (e) => {
+    const projectId = e.target.value ? parseInt(e.target.value, 10) : null;
+    await fetch(`/invoices/${e.target.dataset.id}/project`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ project_id: projectId }),
+    });
+    await loadInvoices();
+  });
+
+  document.getElementById("dStatusSelect").addEventListener("change", async (e) => {
+    const newStatus = e.target.value;
+    const response = await fetch(`/invoices/${e.target.dataset.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: newStatus }),
+    });
+    const updated = await response.json();
+    await loadInvoices();
+
+    const filingInfo = document.getElementById("dFilingInfo");
+    if (updated.filing_warning) {
+      filingInfo.textContent = updated.filing_warning;
+      filingInfo.className = "status error";
+      filingInfo.style.display = "block";
+    } else if (newStatus === "bezahlt") {
+      filingInfo.textContent = "In die 3 Dropbox-Ordner abgelegt.";
+      filingInfo.className = "status";
+      filingInfo.style.display = "block";
+    }
+  });
+
+  document.getElementById("invoiceList").addEventListener("click", (e) => {
+    const btn = e.target.closest("button");
+    if (btn) {
+      if (btn.dataset.action === "delete") deleteInvoice(btn.dataset.id);
+      return;
+    }
+    const card = e.target.closest(".beleg-card");
+    if (!card) return;
+    document.querySelectorAll("#invoiceList .beleg-card.card-selected").forEach((c) => c.classList.remove("card-selected"));
+    card.classList.add("card-selected");
+    updateInvoiceDetail(parseInt(card.dataset.id, 10));
+  });
+
+  document.getElementById("invoiceSearch").addEventListener("input", (e) => {
+    invoiceSearchTerm = e.target.value;
+    renderInvoiceTable();
+  });
+
+  wireSidebar("invoiceSidebar", (filter) => {
+    invoiceFilter = filter;
+    renderInvoiceTable();
+  });
+
+  loadInvoices().then(checkSkontoReminder);
+
+  const invoiceModalOverlay = wireModal("newBelegBtn", "closeInvoiceModalBtn", "invoiceModalOverlay");
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeModal(invoiceModalOverlay);
+  });
+
+  refreshProjectsCache();
+</script>
+</body>
+</html>

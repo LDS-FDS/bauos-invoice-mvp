@@ -1,4 +1,4 @@
-from app import company_settings, customers_db, db, documents_db, projects_db
+from app import company_settings, customers_db, db, documents_db, employees_db, projects_db, time_entries_db
 
 SAMPLE_CUSTOMER = {
     "name": "Muster Immobilien GmbH",
@@ -24,6 +24,8 @@ def _setup(tmp_path):
     db.init_db(db_path)
     company_settings.init_company_settings_table(db_path)
     documents_db.init_documents_tables(db_path)
+    employees_db.init_employees_table(db_path)
+    time_entries_db.init_time_entries_table(db_path)
     return db_path
 
 
@@ -123,3 +125,14 @@ def test_delete_project_unlinks_invoices_and_documents(tmp_path):
 
     assert db.get_invoice(invoice_id, db_path)["project_id"] is None
     assert documents_db.get_document(document_id, db_path)["project_id"] is None
+
+
+def test_delete_project_removes_time_entries(tmp_path):
+    db_path = _setup(tmp_path)
+    project_id = projects_db.create_project(SAMPLE_PROJECT, db_path)
+    employee_id = employees_db.create_employee({"name": "Max Mustermann", "hourly_rate": 25.0}, db_path)
+    time_entries_db.create_time_entry(project_id, employee_id, "01.08.2026", 8, 25.0, db_path)
+
+    projects_db.delete_project(project_id, db_path)
+
+    assert time_entries_db.list_time_entries_for_project(project_id, db_path) == []

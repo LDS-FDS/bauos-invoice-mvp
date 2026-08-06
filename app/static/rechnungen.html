@@ -1,0 +1,419 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BauOS – Rechnungen schreiben</title>
+<link rel="stylesheet" href="/assets/style.css?v=2">
+</head>
+<body>
+<div id="appNav"></div>
+<main>
+  <h1>Rechnungen schreiben</h1>
+  <p class="subtitle">Angebote, Rechnungen und Abschlagsrechnungen an Kunden erstellen.</p>
+
+  <div class="beleg-layout">
+    <div class="beleg-sidebar" id="documentSidebar">
+      <button class="beleg-sidebar-item active" data-filter="alle">Alle</button>
+      <button class="beleg-sidebar-item" data-filter="entwuerfe">Entwürfe</button>
+      <button class="beleg-sidebar-item" data-filter="offene">Offene</button>
+      <button class="beleg-sidebar-item" data-filter="ueberfaellige">Überfällige</button>
+      <button class="beleg-sidebar-item" data-filter="bezahlt">Bezahlt · Angenommen</button>
+      <button class="beleg-sidebar-item" data-filter="storniert">Storniert</button>
+      <button class="beleg-sidebar-item" data-filter="archiviert">Archiviert</button>
+    </div>
+    <div class="beleg-content">
+      <div class="card">
+        <div class="card-header">
+          <h2>Belegliste</h2>
+          <button class="btn-secondary btn-export" id="openDocumentModalBtn" type="button">+ Neuer Beleg</button>
+        </div>
+        <div id="documentListWrapper">
+          <p class="empty-hint" id="documentEmptyHint">Noch keine Angebote oder Rechnungen erstellt.</p>
+          <table id="documentTable" style="display:none">
+            <thead>
+              <tr>
+                <th>Nr.</th>
+                <th>Typ</th>
+                <th>Kunde</th>
+                <th>Projekt</th>
+                <th>Datum</th>
+                <th>Betrag</th>
+                <th>Status</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="documentTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="documentModalOverlay">
+    <div class="modal-dialog">
+      <button class="modal-close" id="closeDocumentModalBtn" type="button">×</button>
+      <h2>Neues Angebot / Neue Rechnung</h2>
+      <div class="form-grid">
+        <select id="docType" class="span-2">
+          <option value="angebot">Angebot</option>
+          <option value="rechnung">Rechnung</option>
+          <option value="abschlagsrechnung">Abschlagsrechnung</option>
+        </select>
+        <select id="docCustomer" class="span-2">
+          <option value="">Kunde wählen...</option>
+        </select>
+        <select id="docProject" class="span-2">
+          <option value="">Kein Projekt</option>
+        </select>
+        <div>
+          <label class="empty-hint" style="display:block; margin-bottom:4px;">Datum</label>
+          <input type="date" id="docIssueDate">
+        </div>
+        <div>
+          <label class="empty-hint" id="docValidDueLabel" style="display:block; margin-bottom:4px;">Gültig bis</label>
+          <input type="date" id="docValidDueDate">
+        </div>
+        <textarea id="docNotes" class="span-2" placeholder="Notizen (optional)" rows="2"></textarea>
+      </div>
+
+      <div id="abschlagHint" class="empty-hint" style="display:none; margin-bottom:12px;">
+        <label>
+          <input type="checkbox" id="abschlagDeductCheckbox" checked>
+          Bereits gestellte Abschlagszahlungen (<span id="abschlagTotalText">0,00 €</span>) automatisch abziehen
+        </label>
+      </div>
+
+      <div class="item-row-header">
+        <span>Beschreibung</span><span>Menge</span><span>Einheit</span><span>Einzelpreis</span><span>MwSt%</span><span></span>
+      </div>
+      <div id="itemRows"></div>
+      <button type="button" class="btn-add-item" id="addItemRowBtn">+ Position hinzufügen</button>
+
+      <div class="totals-box">
+        <div><span>Netto-Summe</span><span id="docNetTotal">0,00 €</span></div>
+        <div><span>MwSt.</span><span id="docTaxTotal">0,00 €</span></div>
+        <div class="grand"><span>Gesamtbetrag</span><span id="docGrossTotal">0,00 €</span></div>
+      </div>
+
+      <button id="createDocumentBtn">Erstellen</button>
+      <div id="documentStatus" class="status"></div>
+    </div>
+  </div>
+</main>
+
+<script src="/assets/common.js?v=2"></script>
+<script>
+  renderNav("/rechnungen-schreiben");
+
+  let allProjects = [];
+
+  async function refreshProjectsCache() {
+    allProjects = await (await fetch("/projects")).json();
+  }
+
+  function projectOptionsHtml(selectedId) {
+    const options = allProjects
+      .map(
+        (p) =>
+          `<option value="${p.id}" ${p.id === selectedId ? "selected" : ""}>${p.name}</option>`
+      )
+      .join("");
+    return `<option value="">–</option>${options}`;
+  }
+
+  const documentModalOverlay = wireModal("openDocumentModalBtn", "closeDocumentModalBtn", "documentModalOverlay");
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeModal(documentModalOverlay);
+  });
+
+  // --- Documents (Angebote & Rechnungen) ---
+  const docTypeSelect = document.getElementById("docType");
+  const docValidDueLabel = document.getElementById("docValidDueLabel");
+  const docValidDueInput = document.getElementById("docValidDueDate");
+  const itemRowsContainer = document.getElementById("itemRows");
+
+  function updateDueLabel() {
+    docValidDueLabel.textContent = docTypeSelect.value === "angebot" ? "Gültig bis" : "Zahlbar bis";
+  }
+  docTypeSelect.addEventListener("change", updateDueLabel);
+  updateDueLabel();
+
+  let currentAbschlagTotal = 0;
+
+  async function updateAbschlagHint() {
+    const hint = document.getElementById("abschlagHint");
+    const projectValue = document.getElementById("docProject").value;
+    currentAbschlagTotal = 0;
+    if (docTypeSelect.value !== "rechnung" || !projectValue) {
+      hint.style.display = "none";
+      return;
+    }
+    const summary = await (await fetch(`/projects/${projectValue}/summary`)).json();
+    currentAbschlagTotal = summary.abschlag_total || 0;
+    if (currentAbschlagTotal > 0) {
+      document.getElementById("abschlagTotalText").textContent = formatEuro(currentAbschlagTotal);
+      hint.style.display = "block";
+    } else {
+      hint.style.display = "none";
+    }
+  }
+  docTypeSelect.addEventListener("change", updateAbschlagHint);
+  document.getElementById("docProject").addEventListener("change", updateAbschlagHint);
+
+  function readItems() {
+    return [...itemRowsContainer.querySelectorAll(".item-row")].map((row) => ({
+      description: row.querySelector(".item-desc").value.trim(),
+      quantity: parseFloat(row.querySelector(".item-qty").value) || 0,
+      unit: row.querySelector(".item-unit").value.trim() || null,
+      unit_price: parseFloat(row.querySelector(".item-price").value) || 0,
+      tax_rate: parseFloat(row.querySelector(".item-tax").value) || 0,
+    }));
+  }
+
+  function updateTotals() {
+    const items = readItems();
+    let net = 0;
+    let tax = 0;
+    for (const item of items) {
+      const lineNet = item.quantity * item.unit_price;
+      net += lineNet;
+      tax += lineNet * (item.tax_rate / 100);
+    }
+    document.getElementById("docNetTotal").textContent = formatEuro(net);
+    document.getElementById("docTaxTotal").textContent = formatEuro(tax);
+    document.getElementById("docGrossTotal").textContent = formatEuro(net + tax);
+  }
+
+  function addItemRow(values = {}) {
+    const row = document.createElement("div");
+    row.className = "item-row";
+    row.innerHTML = `
+      <input type="text" class="item-desc" placeholder="Beschreibung" value="${values.description || ""}">
+      <input type="number" class="item-qty" placeholder="1" step="0.01" value="${values.quantity ?? 1}">
+      <input type="text" class="item-unit" placeholder="Stk." value="${values.unit || ""}">
+      <input type="number" class="item-price" placeholder="0,00" step="0.01" value="${values.unit_price ?? ""}">
+      <input type="number" class="item-tax" placeholder="19" step="0.1" value="${values.tax_rate ?? 19}">
+      <button type="button" class="btn-remove-item">×</button>
+    `;
+    row.querySelector(".btn-remove-item").addEventListener("click", () => {
+      row.remove();
+      updateTotals();
+    });
+    row.querySelectorAll("input").forEach((input) => input.addEventListener("input", updateTotals));
+    itemRowsContainer.appendChild(row);
+    updateTotals();
+  }
+
+  document.getElementById("addItemRowBtn").addEventListener("click", () => addItemRow());
+
+  async function loadCustomersIntoDocumentForm() {
+    const response = await fetch("/customers");
+    const customers = await response.json();
+    const select = document.getElementById("docCustomer");
+    select.innerHTML =
+      '<option value="">Kunde wählen...</option>' +
+      customers.map((c) => `<option value="${c.id}">${c.name}</option>`).join("");
+  }
+
+  function loadProjectsIntoDocumentForm() {
+    const select = document.getElementById("docProject");
+    select.innerHTML =
+      '<option value="">Kein Projekt</option>' +
+      allProjects.map((p) => `<option value="${p.id}">${p.name}</option>`).join("");
+  }
+
+  document.getElementById("createDocumentBtn").addEventListener("click", async () => {
+    const statusEl = document.getElementById("documentStatus");
+    const customerId = document.getElementById("docCustomer").value;
+    if (!customerId) {
+      statusEl.textContent = "Bitte einen Kunden auswählen.";
+      statusEl.className = "status error";
+      return;
+    }
+    const items = readItems().filter((i) => i.description);
+    if (items.length === 0) {
+      statusEl.textContent = "Bitte mindestens eine Position mit Beschreibung angeben.";
+      statusEl.className = "status error";
+      return;
+    }
+
+    const docType = docTypeSelect.value;
+    const projectValue = document.getElementById("docProject").value;
+    if (docType === "abschlagsrechnung" && !projectValue) {
+      statusEl.textContent = "Abschlagsrechnungen benötigen ein Projekt.";
+      statusEl.className = "status error";
+      return;
+    }
+    const payload = {
+      doc_type: docType,
+      customer_id: parseInt(customerId, 10),
+      issue_date: toGermanDate(document.getElementById("docIssueDate").value),
+      notes: document.getElementById("docNotes").value.trim() || null,
+      project_id: projectValue ? parseInt(projectValue, 10) : null,
+      items,
+    };
+    const dueValue = toGermanDate(docValidDueInput.value);
+    if (docType === "angebot") payload.valid_until = dueValue;
+    else payload.due_date = dueValue;
+    if (
+      docType === "rechnung" &&
+      currentAbschlagTotal > 0 &&
+      document.getElementById("abschlagDeductCheckbox").checked
+    ) {
+      payload.abschlag_deduction = currentAbschlagTotal;
+    }
+
+    const response = await fetch("/documents", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const detail = await response.json().catch(() => ({}));
+      statusEl.textContent = detail.detail || "Fehler beim Erstellen.";
+      statusEl.className = "status error";
+      return;
+    }
+
+    statusEl.textContent = "";
+    itemRowsContainer.innerHTML = "";
+    addItemRow();
+    document.getElementById("docNotes").value = "";
+    document.getElementById("docCustomer").value = "";
+    document.getElementById("docProject").value = "";
+    await updateAbschlagHint();
+    await loadDocuments();
+    closeModal(documentModalOverlay);
+  });
+
+  const DOC_STATUS_OPTIONS = {
+    angebot: ["entwurf", "versendet", "angenommen", "abgelehnt", "storniert", "archiviert"],
+    rechnung: ["entwurf", "versendet", "bezahlt", "storniert", "archiviert"],
+    abschlagsrechnung: ["entwurf", "versendet", "bezahlt", "storniert", "archiviert"],
+  };
+
+  function computeDocumentCategory(doc) {
+    if (doc.status === "storniert") return "storniert";
+    if (doc.status === "archiviert") return "archiviert";
+    if (doc.status === "entwurf") return "entwuerfe";
+    if (doc.status === "bezahlt" || doc.status === "angenommen") return "bezahlt";
+    const today = startOfToday();
+    const due = parseGermanDate(doc.due_date || doc.valid_until);
+    if (due && due < today) return "ueberfaellige";
+    return "offene";
+  }
+
+  let allDocuments = [];
+  let documentFilter = "alle";
+
+  async function loadDocuments() {
+    const response = await fetch("/documents");
+    allDocuments = await response.json();
+    renderDocumentTable();
+  }
+
+  function renderDocumentTable() {
+    const table = document.getElementById("documentTable");
+    const emptyHint = document.getElementById("documentEmptyHint");
+    const tbody = document.getElementById("documentTableBody");
+    tbody.innerHTML = "";
+
+    const documents =
+      documentFilter === "alle"
+        ? allDocuments
+        : allDocuments.filter((d) => computeDocumentCategory(d) === documentFilter);
+
+    if (documents.length === 0) {
+      table.style.display = "none";
+      emptyHint.style.display = "block";
+      return;
+    }
+    table.style.display = "table";
+    emptyHint.style.display = "none";
+
+    for (const doc of documents) {
+      const tr = document.createElement("tr");
+      const statusOptions = DOC_STATUS_OPTIONS[doc.doc_type] || [];
+      const optionsHtml = statusOptions
+        .map((s) => `<option value="${s}" ${s === doc.status ? "selected" : ""}>${s}</option>`)
+        .join("");
+      const convertBtn =
+        doc.doc_type === "angebot" && doc.status === "angenommen"
+          ? `<button class="btn-secondary" data-action="convert" data-id="${doc.id}">In Rechnung umwandeln</button>`
+          : "";
+
+      const amountCell =
+        doc.doc_type === "rechnung" && (doc.abschlag_deduction || 0) > 0
+          ? `${formatEuro(doc.gross_total || 0)}<br><span class="empty-hint">Rest: ${formatEuro(doc.amount_due || 0)}</span>`
+          : formatEuro(doc.gross_total || 0);
+
+      tr.innerHTML = `
+        <td>${doc.doc_number}</td>
+        <td>${docTypeLabel(doc)}</td>
+        <td>${doc.customer_name || "–"}</td>
+        <td><select class="document-project-select" data-id="${doc.id}">${projectOptionsHtml(doc.project_id)}</select></td>
+        <td>${doc.issue_date || "–"}</td>
+        <td>${amountCell}</td>
+        <td><select data-id="${doc.id}" class="doc-status-select">${optionsHtml}</select></td>
+        <td class="row-actions">
+          <a class="btn-secondary" href="/documents/${doc.id}/pdf">PDF</a>
+          ${convertBtn}
+          <button class="btn-danger" data-action="delete" data-id="${doc.id}">Löschen</button>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    }
+  }
+
+  document.getElementById("documentTableBody").addEventListener("change", async (e) => {
+    if (!e.target.classList.contains("document-project-select")) return;
+    const projectId = e.target.value ? parseInt(e.target.value, 10) : null;
+    await fetch(`/documents/${e.target.dataset.id}/project`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ project_id: projectId }),
+    });
+  });
+
+  document.getElementById("documentTableBody").addEventListener("click", async (e) => {
+    const btn = e.target.closest("button");
+    if (!btn) return;
+    const id = btn.dataset.id;
+    if (btn.dataset.action === "delete") {
+      await fetch(`/documents/${id}`, { method: "DELETE" });
+      await loadDocuments();
+    } else if (btn.dataset.action === "convert") {
+      await fetch(`/documents/${id}/convert-to-invoice`, { method: "POST" });
+      await loadDocuments();
+    }
+  });
+
+  document.getElementById("documentTableBody").addEventListener("change", async (e) => {
+    if (!e.target.classList.contains("doc-status-select")) return;
+    await fetch(`/documents/${e.target.dataset.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: e.target.value }),
+    });
+    await loadDocuments();
+  });
+
+  wireSidebar("documentSidebar", (filter) => {
+    documentFilter = filter;
+    renderDocumentTable();
+  });
+
+  addItemRow();
+  loadCustomersIntoDocumentForm();
+  loadDocuments();
+
+  refreshProjectsCache().then(() => {
+    loadProjectsIntoDocumentForm();
+    loadDocuments();
+  });
+</script>
+</body>
+</html>

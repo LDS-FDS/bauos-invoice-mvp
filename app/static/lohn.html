@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BauOS – Lohn</title>
+<link rel="stylesheet" href="/assets/style.css?v=2">
+</head>
+<body>
+<div id="appNav"></div>
+<main>
+  <h1>Lohn</h1>
+  <p class="subtitle">Mitarbeiter und Stundenlöhne verwalten. Zeiten werden pro Baustelle erfasst.</p>
+
+  <div class="card">
+    <h2>Neuer Mitarbeiter</h2>
+    <div class="form-grid">
+      <input type="text" id="empName" placeholder="Name *" class="span-2">
+      <input type="number" id="empRate" placeholder="Stundenlohn (€) *" min="0" step="0.5">
+    </div>
+    <button id="addEmployeeBtn">Mitarbeiter speichern</button>
+    <div id="employeeStatus" class="status"></div>
+  </div>
+
+  <div class="card">
+    <h2>Mitarbeiterliste</h2>
+    <div id="employeeListWrapper">
+      <p class="empty-hint" id="employeeEmptyHint">Noch keine Mitarbeiter angelegt.</p>
+      <table id="employeeTable" style="display:none">
+        <thead><tr><th>Name</th><th>Stundenlohn</th><th></th></tr></thead>
+        <tbody id="employeeTableBody"></tbody>
+      </table>
+    </div>
+  </div>
+</main>
+
+<script src="/assets/common.js?v=2"></script>
+<script>
+  renderNav("/lohn");
+
+  async function loadEmployees() {
+    const response = await fetch("/employees");
+    const employees = await response.json();
+
+    const table = document.getElementById("employeeTable");
+    const emptyHint = document.getElementById("employeeEmptyHint");
+    const tbody = document.getElementById("employeeTableBody");
+    tbody.innerHTML = "";
+
+    if (employees.length === 0) {
+      table.style.display = "none";
+      emptyHint.style.display = "block";
+      return;
+    }
+    table.style.display = "table";
+    emptyHint.style.display = "none";
+
+    for (const employee of employees) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${employee.name}</td>
+        <td>${formatEuro(employee.hourly_rate)} / Std.</td>
+        <td class="row-actions">
+          <button class="btn-danger" data-action="delete" data-id="${employee.id}">Löschen</button>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    }
+  }
+
+  document.getElementById("addEmployeeBtn").addEventListener("click", async () => {
+    const statusEl = document.getElementById("employeeStatus");
+    const name = document.getElementById("empName").value.trim();
+    const rate = parseFloat(document.getElementById("empRate").value);
+    if (!name || Number.isNaN(rate)) {
+      statusEl.textContent = "Bitte Name und Stundenlohn angeben.";
+      statusEl.className = "status error";
+      return;
+    }
+
+    const response = await fetch("/employees", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, hourly_rate: rate }),
+    });
+
+    if (!response.ok) {
+      statusEl.textContent = "Fehler beim Speichern.";
+      statusEl.className = "status error";
+      return;
+    }
+
+    statusEl.textContent = "";
+    document.getElementById("empName").value = "";
+    document.getElementById("empRate").value = "";
+    await loadEmployees();
+  });
+
+  document.getElementById("employeeTableBody").addEventListener("click", async (e) => {
+    const btn = e.target.closest("button");
+    if (!btn || btn.dataset.action !== "delete") return;
+    await fetch(`/employees/${btn.dataset.id}`, { method: "DELETE" });
+    await loadEmployees();
+  });
+
+  loadEmployees();
+</script>
+</body>
+</html>

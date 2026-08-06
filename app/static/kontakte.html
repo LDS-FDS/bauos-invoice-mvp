@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BauOS – Kontakte</title>
+<link rel="stylesheet" href="/assets/style.css?v=2">
+</head>
+<body>
+<div id="appNav"></div>
+<main>
+  <h1>Kontakte</h1>
+  <p class="subtitle">Kunden verwalten.</p>
+
+  <div class="card">
+    <h2>Neuer Kunde</h2>
+    <div class="form-grid">
+      <input type="text" id="custName" placeholder="Name / Firma *" class="span-2">
+      <input type="text" id="custStreet" placeholder="Straße" class="span-2">
+      <input type="text" id="custZip" placeholder="PLZ">
+      <input type="text" id="custCity" placeholder="Ort">
+      <input type="email" id="custEmail" placeholder="E-Mail">
+      <input type="text" id="custPhone" placeholder="Telefon">
+    </div>
+    <button id="addCustomerBtn">Kunde speichern</button>
+    <div id="customerStatus" class="status"></div>
+  </div>
+
+  <div class="card">
+    <h2>Kundenliste</h2>
+    <div id="customerListWrapper">
+      <p class="empty-hint" id="customerEmptyHint">Noch keine Kunden gespeichert.</p>
+      <table id="customerTable" style="display:none">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Ort</th>
+            <th>E-Mail</th>
+            <th>Telefon</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="customerTableBody"></tbody>
+      </table>
+    </div>
+  </div>
+</main>
+
+<script src="/assets/common.js?v=2"></script>
+<script>
+  renderNav("/kontakte");
+
+  async function loadCustomers() {
+    const response = await fetch("/customers");
+    const customers = await response.json();
+
+    const table = document.getElementById("customerTable");
+    const emptyHint = document.getElementById("customerEmptyHint");
+    const tbody = document.getElementById("customerTableBody");
+    tbody.innerHTML = "";
+
+    if (customers.length === 0) {
+      table.style.display = "none";
+      emptyHint.style.display = "block";
+      return;
+    }
+    table.style.display = "table";
+    emptyHint.style.display = "none";
+
+    for (const customer of customers) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${customer.name}</td>
+        <td>${customer.city || "–"}</td>
+        <td>${customer.email || "–"}</td>
+        <td>${customer.phone || "–"}</td>
+        <td class="row-actions">
+          <button class="btn-danger" data-id="${customer.id}">Löschen</button>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    }
+  }
+
+  document.getElementById("customerTableBody").addEventListener("click", async (e) => {
+    const btn = e.target.closest("button");
+    if (!btn) return;
+    await fetch(`/customers/${btn.dataset.id}`, { method: "DELETE" });
+    await loadCustomers();
+  });
+
+  document.getElementById("addCustomerBtn").addEventListener("click", async () => {
+    const statusEl = document.getElementById("customerStatus");
+    const name = document.getElementById("custName").value.trim();
+    if (!name) {
+      statusEl.textContent = "Bitte einen Namen angeben.";
+      statusEl.className = "status error";
+      return;
+    }
+
+    const payload = {
+      name,
+      street: document.getElementById("custStreet").value.trim() || null,
+      zip_code: document.getElementById("custZip").value.trim() || null,
+      city: document.getElementById("custCity").value.trim() || null,
+      email: document.getElementById("custEmail").value.trim() || null,
+      phone: document.getElementById("custPhone").value.trim() || null,
+    };
+
+    const response = await fetch("/customers", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      statusEl.textContent = "Fehler beim Speichern.";
+      statusEl.className = "status error";
+      return;
+    }
+
+    ["custName", "custStreet", "custZip", "custCity", "custEmail", "custPhone"].forEach(
+      (id) => (document.getElementById(id).value = "")
+    );
+    statusEl.textContent = "";
+    await loadCustomers();
+  });
+
+  loadCustomers();
+</script>
+</body>
+</html>

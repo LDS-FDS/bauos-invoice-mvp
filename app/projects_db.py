@@ -115,6 +115,7 @@ def delete_project(project_id: int, db_path: Path | None = None) -> bool:
         conn.execute(
             "UPDATE documents SET project_id = NULL WHERE project_id = ?", (project_id,)
         )
+        conn.execute("DELETE FROM time_entries WHERE project_id = ?", (project_id,))
         cursor = conn.execute("DELETE FROM projects WHERE id = ?", (project_id,))
         conn.commit()
         return cursor.rowcount > 0
