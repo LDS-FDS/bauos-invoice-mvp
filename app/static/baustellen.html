@@ -1,0 +1,462 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BauOS – Baustellen &amp; Controlling</title>
+<link rel="stylesheet" href="/assets/style.css?v=2">
+<style>
+  .baustellen-detail { flex: 1; min-width: 0; }
+  .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 18px 0 12px; }
+  .kpi-tile { background: var(--beige); border-radius: 12px; padding: 14px 16px; }
+  .kpi-tile .label { font-size: 0.78rem; color: var(--text-muted); font-weight: 600; }
+  .kpi-tile .value { font-size: 1.25rem; font-weight: 700; margin-top: 4px; }
+  .section-title { font-size: 0.95rem; font-weight: 700; margin: 20px 0 8px; }
+  .linked-list { display: flex; flex-direction: column; gap: 6px; }
+  .linked-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 0.88rem;
+  }
+  .time-entry-form {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr auto;
+    gap: 8px;
+    margin: 10px 0 16px;
+    align-items: end;
+  }
+  .time-entry-form label { font-size: 0.78rem; color: var(--text-muted); display: block; margin-bottom: 4px; }
+  .time-entry-form select,
+  .time-entry-form input {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 0.85rem;
+    font-family: inherit;
+    background: var(--card);
+    color: var(--text);
+  }
+  .time-entry-form button { width: auto; margin: 0; padding: 9px 14px; font-size: 0.85rem; }
+</style>
+</head>
+<body>
+<div id="appNav"></div>
+<main>
+  <h1>Baustellen</h1>
+  <p class="subtitle">Baustellen anlegen, mit Rechnungen verknüpfen und Mitarbeiterzeiten erfassen.</p>
+
+  <div class="beleg-layout">
+      <div class="beleg-sidebar" id="projectSidebar">
+        <button class="btn-primary-action" id="newProjectBtn" type="button">+ Neue Baustelle</button>
+        <button class="beleg-sidebar-item active" data-filter="alle">Alle <span class="sidebar-badge" data-badge="alle"></span></button>
+        <button class="beleg-sidebar-item" data-filter="aktiv">Aktiv <span class="sidebar-badge" data-badge="aktiv"></span></button>
+        <button class="beleg-sidebar-item" data-filter="pausiert">Pausiert <span class="sidebar-badge" data-badge="pausiert"></span></button>
+        <button class="beleg-sidebar-item" data-filter="abgeschlossen">Abgeschlossen <span class="sidebar-badge" data-badge="abgeschlossen"></span></button>
+      </div>
+      <div class="beleg-content">
+        <div class="card">
+          <div class="card-header"><h2>Baustellen</h2></div>
+          <input type="text" id="projectSearch" class="beleg-search" placeholder="Suchen nach Name oder Kunde">
+          <div id="projectListWrapper">
+            <p class="empty-hint" id="projectEmptyHint">Noch keine Baustellen angelegt.</p>
+            <div id="projectList" class="beleg-card-list" style="display:none"></div>
+          </div>
+        </div>
+      </div>
+      <div class="beleg-detail baustellen-detail" id="projectDetailPane">
+        <p class="empty-hint" id="projectDetailEmpty">Baustelle auswählen, um Details zu sehen.</p>
+        <div id="projectDetailContent" style="display:none">
+          <h3 id="pdName">–</h3>
+          <div class="result-row"><span class="result-label">Kunde</span><span class="result-value" id="pdCustomer">–</span></div>
+          <div class="result-row"><span class="result-label">Adresse</span><span class="result-value" id="pdAddress">–</span></div>
+          <div class="result-row"><span class="result-label">Zeitraum</span><span class="result-value" id="pdTimeframe">–</span></div>
+          <label class="empty-hint" for="pdStatusSelect" style="display:block; margin-top:10px;">Status</label>
+          <select id="pdStatusSelect"></select>
+
+          <div class="kpi-grid">
+            <div class="kpi-tile"><div class="label">Bezahlt erhalten</div><div class="value" id="pdPaidRevenue">–</div></div>
+            <div class="kpi-tile"><div class="label">Noch offen</div><div class="value" id="pdUnpaidRevenue">–</div></div>
+            <div class="kpi-tile"><div class="label">Materialkosten</div><div class="value" id="pdMaterialCosts">–</div></div>
+            <div class="kpi-tile"><div class="label">Lohnkosten</div><div class="value" id="pdLaborCosts">–</div></div>
+          </div>
+          <div class="totals-box"><div class="grand"><span>Saldo</span><span id="pdBalance">–</span></div></div>
+
+          <div class="section-title">Rechnungen &amp; Angebote an Kunden</div>
+          <div id="pdDocuments" class="linked-list">
+            <p class="empty-hint">Keine Angebote/Rechnungen zugeordnet.</p>
+          </div>
+
+          <div class="section-title">Eingangsrechnungen (Material)</div>
+          <div id="pdInvoices" class="linked-list">
+            <p class="empty-hint">Keine Eingangsrechnungen zugeordnet.</p>
+          </div>
+
+          <div class="section-title">Mitarbeiterzeiten</div>
+          <div class="time-entry-form">
+            <div>
+              <label for="teEmployee">Mitarbeiter</label>
+              <select id="teEmployee"></select>
+            </div>
+            <div>
+              <label for="teDate">Datum</label>
+              <input type="date" id="teDate">
+            </div>
+            <div>
+              <label for="teHours">Stunden</label>
+              <input type="number" id="teHours" min="0" step="0.25">
+            </div>
+            <button id="addTimeEntryBtn" type="button">+ Eintragen</button>
+          </div>
+          <div id="timeEntryStatus" class="status"></div>
+          <div id="pdTimeEntries" class="linked-list">
+            <p class="empty-hint">Noch keine Zeiten erfasst.</p>
+          </div>
+
+          <button class="btn-danger" id="deleteProjectBtn" type="button" style="width:auto; margin-top:20px;">Baustelle löschen</button>
+        </div>
+      </div>
+    </div>
+
+  <div class="modal-overlay" id="projectModalOverlay">
+    <div class="modal-dialog">
+      <button class="modal-close" id="closeProjectModalBtn" type="button">×</button>
+      <h2>Neue Baustelle</h2>
+      <div class="form-grid">
+        <input type="text" id="projName" placeholder="Projektname *" class="span-2">
+        <select id="projCustomer" class="span-2">
+          <option value="">Kunde wählen... (optional)</option>
+        </select>
+        <input type="text" id="projStreet" placeholder="Straße" class="span-2">
+        <input type="text" id="projZip" placeholder="PLZ">
+        <input type="text" id="projCity" placeholder="Ort">
+        <div>
+          <label class="empty-hint" style="display:block; margin-bottom:4px;">Start</label>
+          <input type="date" id="projStartDate">
+        </div>
+        <div>
+          <label class="empty-hint" style="display:block; margin-bottom:4px;">Ende</label>
+          <input type="date" id="projEndDate">
+        </div>
+        <textarea id="projNotes" class="span-2" placeholder="Notizen (optional)" rows="2"></textarea>
+      </div>
+      <button id="addProjectBtn">Baustelle speichern</button>
+      <div id="projectStatus" class="status"></div>
+    </div>
+  </div>
+</main>
+
+<script src="/assets/common.js?v=2"></script>
+<script>
+  renderNav("/baustellen");
+
+  const projectModalOverlay = wireModal("newProjectBtn", "closeProjectModalBtn", "projectModalOverlay");
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeModal(projectModalOverlay);
+  });
+
+  const PROJECT_STATUS_OPTIONS = ["aktiv", "abgeschlossen", "pausiert"];
+
+  // --- Employees (Mitarbeiter-Dropdown für Zeiterfassung; Verwaltung ist unter /lohn) ---
+  async function loadEmployees() {
+    const response = await fetch("/employees");
+    const employees = await response.json();
+    document.getElementById("teEmployee").innerHTML = employees
+      .map((e) => `<option value="${e.id}">${e.name}</option>`)
+      .join("");
+  }
+
+  // --- Projects (Baustellen) ---
+  let allProjects = [];
+  let projectFilter = "alle";
+  let projectSearchTerm = "";
+  let selectedProjectId = null;
+
+  async function loadCustomersIntoProjectForm() {
+    const response = await fetch("/customers");
+    const customers = await response.json();
+    const select = document.getElementById("projCustomer");
+    select.innerHTML =
+      '<option value="">Kunde wählen... (optional)</option>' +
+      customers.map((c) => `<option value="${c.id}">${c.name}</option>`).join("");
+  }
+
+  function renderSidebarBadges() {
+    const counts = { alle: allProjects.length, aktiv: 0, pausiert: 0, abgeschlossen: 0 };
+    for (const project of allProjects) {
+      counts[project.status] = (counts[project.status] || 0) + 1;
+    }
+    document.querySelectorAll("#projectSidebar .sidebar-badge").forEach((el) => {
+      const key = el.dataset.badge;
+      const count = counts[key] || 0;
+      el.textContent = count > 0 ? String(count) : "";
+      el.dataset.count = String(count);
+    });
+  }
+
+  function matchesProjectSearch(project, term) {
+    if (!term) return true;
+    const haystack = `${project.name} ${project.customer_name || ""}`.toLowerCase();
+    return haystack.includes(term);
+  }
+
+  function renderProjectList() {
+    const emptyHint = document.getElementById("projectEmptyHint");
+    const list = document.getElementById("projectList");
+    list.innerHTML = "";
+
+    renderSidebarBadges();
+
+    const term = projectSearchTerm.trim().toLowerCase();
+    const projects = allProjects
+      .filter((p) => projectFilter === "alle" || p.status === projectFilter)
+      .filter((p) => matchesProjectSearch(p, term));
+
+    if (projects.length === 0) {
+      list.style.display = "none";
+      emptyHint.style.display = "block";
+      emptyHint.textContent = allProjects.length === 0
+        ? "Noch keine Baustellen angelegt."
+        : "Keine Baustellen für diese Auswahl.";
+      if (selectedProjectId != null) clearProjectDetail();
+      return;
+    }
+    list.style.display = "flex";
+    emptyHint.style.display = "none";
+
+    for (const project of projects) {
+      const card = document.createElement("div");
+      card.className = "beleg-card";
+      if (project.id === selectedProjectId) card.classList.add("card-selected");
+      card.dataset.id = project.id;
+      const timeframe = [project.start_date, project.end_date].filter(Boolean).join(" – ");
+
+      card.innerHTML = `
+        <div class="beleg-card-main">
+          <div class="beleg-card-supplier">${project.name}</div>
+          <div class="beleg-card-meta">${project.customer_name || "Kein Kunde"}${timeframe ? " · " + timeframe : ""}</div>
+        </div>
+        <div class="beleg-card-right">
+          <span class="badge ${project.status}">${project.status}</span>
+          <button class="btn-danger beleg-card-delete" data-action="delete" data-id="${project.id}">Löschen</button>
+        </div>
+      `;
+      list.appendChild(card);
+    }
+
+    if (selectedProjectId != null) {
+      if (projects.some((p) => p.id === selectedProjectId)) updateProjectDetail(selectedProjectId);
+      else clearProjectDetail();
+    }
+  }
+
+  async function loadProjects() {
+    const response = await fetch("/projects");
+    allProjects = await response.json();
+    renderProjectList();
+  }
+
+  function clearProjectDetail() {
+    selectedProjectId = null;
+    document.getElementById("projectDetailEmpty").style.display = "block";
+    document.getElementById("projectDetailContent").style.display = "none";
+  }
+
+  function linkedRowsHtml(items, emptyText) {
+    if (items.length === 0) return `<p class="empty-hint">${emptyText}</p>`;
+    return items.map((row) => `<div class="linked-row">${row}</div>`).join("");
+  }
+
+  async function updateProjectDetail(id) {
+    const project = allProjects.find((p) => p.id === id);
+    if (!project) return clearProjectDetail();
+    selectedProjectId = id;
+
+    document.getElementById("projectDetailEmpty").style.display = "none";
+    document.getElementById("projectDetailContent").style.display = "block";
+
+    document.getElementById("pdName").textContent = project.name;
+    document.getElementById("pdCustomer").textContent = project.customer_name || "–";
+    document.getElementById("pdAddress").textContent =
+      [project.street, [project.zip_code, project.city].filter(Boolean).join(" ")].filter(Boolean).join(", ") || "–";
+    document.getElementById("pdTimeframe").textContent =
+      [project.start_date, project.end_date].filter(Boolean).join(" – ") || "–";
+
+    const statusSelect = document.getElementById("pdStatusSelect");
+    statusSelect.dataset.id = project.id;
+    statusSelect.innerHTML = PROJECT_STATUS_OPTIONS.map(
+      (s) => `<option value="${s}" ${s === project.status ? "selected" : ""}>${s}</option>`
+    ).join("");
+
+    document.getElementById("teDate").valueAsDate = new Date();
+
+    const summary = await (await fetch(`/projects/${id}/summary`)).json();
+
+    document.getElementById("pdPaidRevenue").textContent = formatEuro(summary.paid_revenue);
+    document.getElementById("pdUnpaidRevenue").textContent = formatEuro(summary.unpaid_revenue);
+    document.getElementById("pdMaterialCosts").textContent = formatEuro(summary.costs);
+    document.getElementById("pdLaborCosts").textContent = formatEuro(summary.labor_cost);
+    document.getElementById("pdBalance").textContent = formatEuro(summary.balance);
+
+    document.getElementById("pdDocuments").innerHTML = linkedRowsHtml(
+      summary.documents.map(
+        (d) =>
+          `<span>${d.doc_number} (${docTypeLabel(d)})</span><span><span class="badge ${d.status}">${d.status}</span> ${formatEuro(d.gross_total || 0)}</span>`
+      ),
+      "Keine Angebote/Rechnungen zugeordnet."
+    );
+
+    document.getElementById("pdInvoices").innerHTML = linkedRowsHtml(
+      summary.invoices.map(
+        (inv) =>
+          `<span>${inv.supplier || "–"} · ${inv.invoice_number || "–"}</span><span>${inv.total_amount != null ? formatEuro(inv.total_amount) : "–"}</span>`
+      ),
+      "Keine Eingangsrechnungen zugeordnet."
+    );
+
+    document.getElementById("pdTimeEntries").innerHTML = linkedRowsHtml(
+      summary.time_entries.map(
+        (t) =>
+          `<span>${t.employee_name || "–"} · ${t.entry_date || "–"} · ${t.hours} Std.</span>` +
+          `<span>${formatEuro(t.cost)} <button class="btn-danger" data-action="delete-time-entry" data-id="${t.id}" style="width:auto; margin:0 0 0 8px; padding:2px 8px; font-size:0.75rem;">×</button></span>`
+      ),
+      "Noch keine Zeiten erfasst."
+    );
+  }
+
+  document.getElementById("addProjectBtn").addEventListener("click", async () => {
+    const statusEl = document.getElementById("projectStatus");
+    const name = document.getElementById("projName").value.trim();
+    if (!name) {
+      statusEl.textContent = "Bitte einen Projektnamen angeben.";
+      statusEl.className = "status error";
+      return;
+    }
+    const customerValue = document.getElementById("projCustomer").value;
+    const payload = {
+      name,
+      customer_id: customerValue ? parseInt(customerValue, 10) : null,
+      street: document.getElementById("projStreet").value.trim() || null,
+      zip_code: document.getElementById("projZip").value.trim() || null,
+      city: document.getElementById("projCity").value.trim() || null,
+      start_date: toGermanDate(document.getElementById("projStartDate").value),
+      end_date: toGermanDate(document.getElementById("projEndDate").value),
+      notes: document.getElementById("projNotes").value.trim() || null,
+    };
+
+    const response = await fetch("/projects", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      statusEl.textContent = "Fehler beim Speichern.";
+      statusEl.className = "status error";
+      return;
+    }
+
+    statusEl.textContent = "";
+    ["projName", "projStreet", "projZip", "projCity", "projStartDate", "projEndDate", "projNotes"].forEach(
+      (id) => (document.getElementById(id).value = "")
+    );
+    document.getElementById("projCustomer").value = "";
+    closeModal(projectModalOverlay);
+    await loadProjects();
+  });
+
+  document.getElementById("projectList").addEventListener("click", (e) => {
+    const btn = e.target.closest("button");
+    if (btn) {
+      if (btn.dataset.action === "delete") deleteProject(btn.dataset.id);
+      return;
+    }
+    const card = e.target.closest(".beleg-card");
+    if (!card) return;
+    updateProjectDetail(parseInt(card.dataset.id, 10));
+    renderProjectList();
+  });
+
+  document.getElementById("projectSearch").addEventListener("input", (e) => {
+    projectSearchTerm = e.target.value;
+    renderProjectList();
+  });
+
+  document.querySelectorAll("#projectSidebar .beleg-sidebar-item").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll("#projectSidebar .beleg-sidebar-item").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      projectFilter = btn.dataset.filter;
+      renderProjectList();
+    });
+  });
+
+  async function deleteProject(id) {
+    await fetch(`/projects/${id}`, { method: "DELETE" });
+    if (selectedProjectId === parseInt(id, 10)) clearProjectDetail();
+    await loadProjects();
+  }
+
+  document.getElementById("deleteProjectBtn").addEventListener("click", () => {
+    if (selectedProjectId != null) deleteProject(selectedProjectId);
+  });
+
+  document.getElementById("pdStatusSelect").addEventListener("change", async (e) => {
+    await fetch(`/projects/${e.target.dataset.id}/status`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: e.target.value }),
+    });
+    await loadProjects();
+  });
+
+  document.getElementById("addTimeEntryBtn").addEventListener("click", async () => {
+    const statusEl = document.getElementById("timeEntryStatus");
+    const employeeId = document.getElementById("teEmployee").value;
+    const hours = parseFloat(document.getElementById("teHours").value);
+    if (!employeeId || Number.isNaN(hours)) {
+      statusEl.textContent = "Bitte Mitarbeiter und Stunden angeben.";
+      statusEl.className = "status error";
+      return;
+    }
+
+    const response = await fetch("/time-entries", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        project_id: selectedProjectId,
+        employee_id: parseInt(employeeId, 10),
+        entry_date: toGermanDate(document.getElementById("teDate").value),
+        hours,
+      }),
+    });
+
+    if (!response.ok) {
+      statusEl.textContent = "Fehler beim Speichern.";
+      statusEl.className = "status error";
+      return;
+    }
+
+    statusEl.textContent = "";
+    document.getElementById("teHours").value = "";
+    await updateProjectDetail(selectedProjectId);
+  });
+
+  document.getElementById("pdTimeEntries").addEventListener("click", async (e) => {
+    const btn = e.target.closest("button");
+    if (!btn || btn.dataset.action !== "delete-time-entry") return;
+    await fetch(`/time-entries/${btn.dataset.id}`, { method: "DELETE" });
+    await updateProjectDetail(selectedProjectId);
+  });
+
+  loadCustomersIntoProjectForm();
+  loadEmployees();
+  loadProjects();
+</script>
+</body>
+</html>

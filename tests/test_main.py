@@ -1,7 +1,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from app import company_settings, customers_db, db, documents_db, projects_db
+from app import company_settings, customers_db, db, documents_db, employees_db, projects_db, time_entries_db
 from app import main as main_module
 from app.ai_invoice_extractor import AIInvoiceData
 from app.invoice_parser import InvoiceData
@@ -31,6 +31,8 @@ def client(tmp_path, monkeypatch):
     company_settings.init_company_settings_table()
     projects_db.init_projects_table()
     documents_db.init_documents_tables()
+    employees_db.init_employees_table()
+    time_entries_db.init_time_entries_table()
     return TestClient(app)
 
 
@@ -205,6 +207,47 @@ def test_marking_bezahlt_files_invoice_into_three_locations(client, monkeypatch,
     assert (
         filing_base / "09 FIBU" / "2026" / "06 Juni 2026" / "02 für Datev" / expected_filename
     ).exists()
+
+
+def test_parse_detects_gutschrift_and_uses_gus_filename(client, monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        main_module, "_extract_text_from_pdf", lambda file_bytes: "GUTSCHRIFT\nsome text"
+    )
+    monkeypatch.setattr(
+        main_module,
+        "parse_invoice_text",
+        lambda text: InvoiceData(
+            supplier="Brillux",
+            invoice_number="7182750",
+            invoice_date="29.06.2026",
+            total_amount=100.0,
+            currency="EUR",
+            due_date="10.07.2026",
+            skonto_percent=None,
+            skonto_date=None,
+            skonto_amount=None,
+            bank_account=None,
+            bank_name=None,
+        ),
+    )
+
+    parsed = client.post(
+        "/invoices/parse",
+        files={"file": ("gutschrift.pdf", b"%PDF-fake", "application/pdf")},
+    )
+
+    assert parsed.status_code == 200
+    assert parsed.json()["is_gutschrift"] is True
+
+    invoice_id = parsed.json()["id"]
+    filing_base = tmp_path / "1. CIDE"
+    client.put("/company-settings", json={"filing_base_path": str(filing_base)})
+
+    patched = client.patch(f"/invoices/{invoice_id}", json={"status": "bezahlt"})
+    assert patched.status_code == 200
+
+    expected_filename = "260629 GUS Brillux RE-NR. 7182750.pdf"
+    assert (filing_base / "03 Vertragspartner" / "Brillux" / expected_filename).exists()
 
 
 def test_invoice_status_rejects_invalid_value(client):
@@ -586,6 +629,132 @@ def test_project_summary(client):
     assert len(data["documents"]) == 1
 
 
+def test_project_summary_splits_paid_and_unpaid_revenue(client):
+    customer_id = _create_customer(client)
+    project_id = client.post("/projects", json=SAMPLE_PROJECT).json()["id"]
+
+    paid_doc = client.post(
+        "/documents",
+        json={
+            "doc_type": "rechnung",
+            "customer_id": customer_id,
+            "items": SAMPLE_ITEMS,
+            "project_id": project_id,
+        },
+    ).json()
+    client.patch(f"/documents/{paid_doc['id']}", json={"status": "bezahlt"})
+
+    open_doc = client.post(
+        "/documents",
+        json={
+            "doc_type": "rechnung",
+            "customer_id": customer_id,
+            "items": SAMPLE_ITEMS,
+            "project_id": project_id,
+        },
+    ).json()
+
+    summary = client.get(f"/projects/{project_id}/summary").json()
+    assert summary["paid_revenue"] == paid_doc["gross_total"]
+    assert summary["unpaid_revenue"] == open_doc["gross_total"]
+
+
+def test_employee_lifecycle(client):
+    created = client.post("/employees", json={"name": "Max Mustermann", "hourly_rate": 25.0})
+    assert created.status_code == 200
+    employee_id = created.json()["id"]
+
+    listed = client.get("/employees").json()
+    assert len(listed) == 1
+
+    updated = client.patch(
+        f"/employees/{employee_id}", json={"name": "Max Mustermann", "hourly_rate": 30.0}
+    )
+    assert updated.status_code == 200
+    assert updated.json()["hourly_rate"] == 30.0
+
+    deleted = client.delete(f"/employees/{employee_id}")
+    assert deleted.status_code == 200
+    assert client.get("/employees").json() == []
+
+
+def test_update_unknown_employee_returns_404(client):
+    assert client.patch("/employees/9999", json={"name": "X", "hourly_rate": 10}).status_code == 404
+
+
+def test_delete_unknown_employee_returns_404(client):
+    assert client.delete("/employees/9999").status_code == 404
+
+
+def test_time_entry_uses_employee_hourly_rate_snapshot(client):
+    project_id = client.post("/projects", json=SAMPLE_PROJECT).json()["id"]
+    employee_id = client.post(
+        "/employees", json={"name": "Max Mustermann", "hourly_rate": 25.0}
+    ).json()["id"]
+
+    entry = client.post(
+        "/time-entries",
+        json={
+            "project_id": project_id,
+            "employee_id": employee_id,
+            "entry_date": "01.08.2026",
+            "hours": 8,
+        },
+    )
+    assert entry.status_code == 200
+    assert entry.json()["hourly_rate"] == 25.0
+    assert entry.json()["cost"] == 200.0
+
+    # Changing the employee's rate afterwards must not affect the existing entry.
+    client.patch(f"/employees/{employee_id}", json={"name": "Max Mustermann", "hourly_rate": 40.0})
+
+    summary = client.get(f"/projects/{project_id}/summary").json()
+    assert summary["labor_cost"] == 200.0
+    assert len(summary["time_entries"]) == 1
+    assert summary["balance"] == summary["revenue"] - summary["costs"] - 200.0
+
+
+def test_create_time_entry_with_unknown_project_returns_404(client):
+    employee_id = client.post(
+        "/employees", json={"name": "Max Mustermann", "hourly_rate": 25.0}
+    ).json()["id"]
+    response = client.post(
+        "/time-entries",
+        json={"project_id": 9999, "employee_id": employee_id, "hours": 4},
+    )
+    assert response.status_code == 404
+
+
+def test_create_time_entry_with_unknown_employee_returns_404(client):
+    project_id = client.post("/projects", json=SAMPLE_PROJECT).json()["id"]
+    response = client.post(
+        "/time-entries",
+        json={"project_id": project_id, "employee_id": 9999, "hours": 4},
+    )
+    assert response.status_code == 404
+
+
+def test_delete_time_entry(client):
+    project_id = client.post("/projects", json=SAMPLE_PROJECT).json()["id"]
+    employee_id = client.post(
+        "/employees", json={"name": "Max Mustermann", "hourly_rate": 25.0}
+    ).json()["id"]
+    entry_id = client.post(
+        "/time-entries",
+        json={"project_id": project_id, "employee_id": employee_id, "hours": 4},
+    ).json()["id"]
+
+    deleted = client.delete(f"/time-entries/{entry_id}")
+    assert deleted.status_code == 200
+
+    summary = client.get(f"/projects/{project_id}/summary").json()
+    assert summary["time_entries"] == []
+
+
+def test_delete_unknown_time_entry_returns_404(client):
+    assert client.delete("/time-entries/9999").status_code == 404
+
+
 def test_project_summary_unknown_project_returns_404(client):
     assert client.get("/projects/9999/summary").status_code == 404
 
@@ -652,3 +821,20 @@ def test_create_rechnung_with_abschlag_deduction_reduces_amount_due(client):
     ).json()
 
     assert document["amount_due"] == round(document["gross_total"] - 200.0, 2)
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/",
+        "/belege",
+        "/finanzen",
+        "/kontakte",
+        "/artikel",
+        "/rechnungen-schreiben",
+        "/lohn",
+        "/baustellen",
+    ],
+)
+def test_page_routes_return_200(client, path):
+    assert client.get(path).status_code == 200

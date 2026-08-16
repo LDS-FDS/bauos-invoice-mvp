@@ -5,9 +5,19 @@ from typing import Literal
 import pdfplumber
 from fastapi import FastAPI, HTTPException, UploadFile
 from fastapi.responses import FileResponse, Response
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from app import company_settings, customers_db, db, documents_db, invoice_filing, projects_db
+from app import (
+    company_settings,
+    customers_db,
+    db,
+    documents_db,
+    employees_db,
+    invoice_filing,
+    projects_db,
+    time_entries_db,
+)
 from app.ai_invoice_extractor import extract_invoice_from_image, extract_invoice_with_ai
 from app.document_pdf import build_document_pdf
 from app.invoice_parser import parse_invoice_text
@@ -21,11 +31,49 @@ customers_db.init_customers_table()
 company_settings.init_company_settings_table()
 projects_db.init_projects_table()
 documents_db.init_documents_tables()
+employees_db.init_employees_table()
+time_entries_db.init_time_entries_table()
+app.mount("/assets", StaticFiles(directory="app/static"), name="assets")
 
 
 @app.get("/")
-def frontend() -> FileResponse:
-    return FileResponse("app/static/index.html")
+def dashboard_frontend() -> FileResponse:
+    return FileResponse("app/static/dashboard.html")
+
+
+@app.get("/belege")
+def belege_frontend() -> FileResponse:
+    return FileResponse("app/static/belege.html")
+
+
+@app.get("/finanzen")
+def finanzen_frontend() -> FileResponse:
+    return FileResponse("app/static/finanzen.html")
+
+
+@app.get("/kontakte")
+def kontakte_frontend() -> FileResponse:
+    return FileResponse("app/static/kontakte.html")
+
+
+@app.get("/artikel")
+def artikel_frontend() -> FileResponse:
+    return FileResponse("app/static/artikel.html")
+
+
+@app.get("/rechnungen-schreiben")
+def rechnungen_frontend() -> FileResponse:
+    return FileResponse("app/static/rechnungen.html")
+
+
+@app.get("/lohn")
+def lohn_frontend() -> FileResponse:
+    return FileResponse("app/static/lohn.html")
+
+
+@app.get("/baustellen")
+def baustellen_frontend() -> FileResponse:
+    return FileResponse("app/static/baustellen.html")
 
 
 def _extract_text_from_pdf(file_bytes: bytes) -> str:
@@ -88,6 +136,7 @@ async def parse_invoice(file: UploadFile):
             result = extract_invoice_with_ai(text)
 
     response = _build_response(result)
+    response["is_gutschrift"] = "gutschrift" in text.lower()
 
     INVOICE_FILES_DIR.mkdir(parents=True, exist_ok=True)
     stored_filename = invoice_filing.build_invoice_filename(response)
@@ -138,6 +187,17 @@ def update_invoice_status(invoice_id: int, body: StatusUpdate) -> dict:
                 invoice["filing_warning"] = "Rechnung konnte nicht vollständig abgelegt werden."
 
     return invoice
+
+
+@app.get("/invoices/{invoice_id}/file")
+def get_invoice_file(invoice_id: int) -> FileResponse:
+    invoice = db.get_invoice(invoice_id)
+    if invoice is None:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    file_path = invoice.get("file_path")
+    if not file_path or not Path(file_path).is_file():
+        raise HTTPException(status_code=404, detail="No file stored for this invoice")
+    return FileResponse(file_path, media_type="application/pdf")
 
 
 @app.delete("/invoices/{invoice_id}")
@@ -200,6 +260,71 @@ def delete_customer(customer_id: int) -> dict:
     if not customers_db.delete_customer(customer_id):
         raise HTTPException(status_code=404, detail="Customer not found")
     return {"deleted": customer_id}
+
+
+class EmployeeIn(BaseModel):
+    name: str
+    hourly_rate: float = 0
+
+
+@app.post("/employees")
+def create_employee(employee: EmployeeIn) -> dict:
+    employee_id = employees_db.create_employee(employee.model_dump())
+    return employees_db.get_employee(employee_id)
+
+
+@app.get("/employees")
+def list_employees() -> list[dict]:
+    return employees_db.list_employees()
+
+
+@app.patch("/employees/{employee_id}")
+def update_employee(employee_id: int, employee: EmployeeIn) -> dict:
+    if not employees_db.update_employee(employee_id, employee.model_dump()):
+        raise HTTPException(status_code=404, detail="Employee not found")
+    return employees_db.get_employee(employee_id)
+
+
+@app.delete("/employees/{employee_id}")
+def delete_employee(employee_id: int) -> dict:
+    if not employees_db.delete_employee(employee_id):
+        raise HTTPException(status_code=404, detail="Employee not found")
+    return {"deleted": employee_id}
+
+
+class TimeEntryIn(BaseModel):
+    project_id: int
+    employee_id: int
+    entry_date: str | None = None
+    hours: float
+
+
+@app.post("/time-entries")
+def create_time_entry(entry: TimeEntryIn) -> dict:
+    if projects_db.get_project(entry.project_id) is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    employee = employees_db.get_employee(entry.employee_id)
+    if employee is None:
+        raise HTTPException(status_code=404, detail="Employee not found")
+
+    entry_id = time_entries_db.create_time_entry(
+        project_id=entry.project_id,
+        employee_id=entry.employee_id,
+        entry_date=entry.entry_date,
+        hours=entry.hours,
+        hourly_rate=employee["hourly_rate"],
+    )
+    return next(
+        e for e in time_entries_db.list_time_entries_for_project(entry.project_id)
+        if e["id"] == entry_id
+    )
+
+
+@app.delete("/time-entries/{entry_id}")
+def delete_time_entry(entry_id: int) -> dict:
+    if not time_entries_db.delete_time_entry(entry_id):
+        raise HTTPException(status_code=404, detail="Time entry not found")
+    return {"deleted": entry_id}
 
 
 class CompanySettingsIn(BaseModel):
@@ -385,20 +510,33 @@ def get_project_summary(project_id: int) -> dict:
 
     invoices = db.list_invoices(project_id)
     documents = documents_db.list_documents(project_id=project_id)
+    time_entries = time_entries_db.list_time_entries_for_project(project_id)
 
     costs = sum(inv["total_amount"] or 0 for inv in invoices)
-    revenue = sum(
-        doc["gross_total"] or 0 for doc in documents if doc["doc_type"] == "rechnung"
+    revenue_docs = [doc for doc in documents if doc["doc_type"] == "rechnung"]
+    revenue = sum(doc["gross_total"] or 0 for doc in revenue_docs)
+    paid_revenue = sum(
+        doc["gross_total"] or 0 for doc in revenue_docs if doc["status"] == "bezahlt"
+    )
+    unpaid_revenue = sum(
+        doc["gross_total"] or 0
+        for doc in revenue_docs
+        if doc["status"] not in ("bezahlt", "storniert")
     )
     abschlag_total = documents_db.get_abschlag_total(project_id)
+    labor_cost = time_entries_db.get_labor_cost_total(project_id)
 
     return {
         "project": project,
         "invoices": invoices,
         "documents": documents,
+        "time_entries": time_entries,
         "costs": round(costs, 2),
         "revenue": round(revenue, 2),
-        "balance": round(revenue - costs, 2),
+        "paid_revenue": round(paid_revenue, 2),
+        "unpaid_revenue": round(unpaid_revenue, 2),
+        "labor_cost": labor_cost,
+        "balance": round(revenue - costs - labor_cost, 2),
         "abschlag_total": abschlag_total,
     }
 

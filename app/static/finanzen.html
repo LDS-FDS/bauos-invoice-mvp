@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BauOS – Finanzen</title>
+<link rel="stylesheet" href="/assets/style.css?v=2">
+</head>
+<body>
+<div id="appNav"></div>
+<main>
+  <h1>Finanzen</h1>
+  <p class="subtitle">Firmendaten und Bankverbindung.</p>
+
+  <div class="card">
+    <h2>Firmendaten</h2>
+    <p class="empty-hint">Diese Angaben erscheinen später auf deinen Angeboten und Rechnungen.</p>
+    <div class="form-grid">
+      <input type="text" id="companyName" placeholder="Firmenname *" class="span-2">
+      <input type="text" id="companyStreet" placeholder="Straße" class="span-2">
+      <input type="text" id="companyZip" placeholder="PLZ">
+      <input type="text" id="companyCity" placeholder="Ort">
+      <input type="email" id="companyEmail" placeholder="E-Mail">
+      <input type="text" id="companyPhone" placeholder="Telefon">
+      <input type="text" id="companyTaxId" placeholder="USt-IdNr." class="span-2">
+      <input type="text" id="companyBankName" placeholder="Bank">
+      <input type="text" id="companyBankIban" placeholder="IBAN">
+      <input type="number" id="companyPaymentTermDays" placeholder="Standard-Zahlungsziel (Tage)" class="span-2">
+      <input type="text" id="companyFilingBasePath" placeholder="Dropbox-Basispfad (für automatische Ablage bezahlter Rechnungen)" class="span-2">
+    </div>
+    <p class="empty-hint">Wird verwendet, um "Zahlbar bis" bei neuen Rechnungen automatisch zu berechnen (Rechnungsdatum + Tage). Leer lassen, um es manuell einzutragen.</p>
+    <p class="empty-hint">Der Dropbox-Basispfad wird verwendet, um bezahlte Eingangsrechnungen automatisch in "03 Vertragspartner", "09 FIBU/.../01 Eingang" und "09 FIBU/.../02 für Datev" abzulegen. Leer lassen, um die automatische Ablage zu deaktivieren.</p>
+    <button id="saveCompanyBtn">Speichern</button>
+    <div id="companyStatus" class="status"></div>
+  </div>
+</main>
+
+<script src="/assets/common.js?v=2"></script>
+<script>
+  renderNav("/finanzen");
+
+  const companyFieldMap = {
+    companyName: "name",
+    companyStreet: "street",
+    companyZip: "zip_code",
+    companyCity: "city",
+    companyEmail: "email",
+    companyPhone: "phone",
+    companyTaxId: "tax_id",
+    companyBankName: "bank_name",
+    companyBankIban: "bank_iban",
+    companyPaymentTermDays: "default_payment_term_days",
+    companyFilingBasePath: "filing_base_path",
+  };
+
+  async function loadCompanySettings() {
+    const response = await fetch("/company-settings");
+    const settings = await response.json();
+    for (const [elementId, field] of Object.entries(companyFieldMap)) {
+      document.getElementById(elementId).value = settings[field] || "";
+    }
+  }
+
+  document.getElementById("saveCompanyBtn").addEventListener("click", async () => {
+    const statusEl = document.getElementById("companyStatus");
+    const payload = {};
+    for (const [elementId, field] of Object.entries(companyFieldMap)) {
+      const rawValue = document.getElementById(elementId).value.trim();
+      payload[field] = field === "default_payment_term_days"
+        ? (rawValue ? parseInt(rawValue, 10) : null)
+        : (rawValue || null);
+    }
+
+    const response = await fetch("/company-settings", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    statusEl.textContent = response.ok ? "Gespeichert." : "Fehler beim Speichern.";
+    statusEl.className = response.ok ? "status" : "status error";
+  });
+
+  loadCompanySettings();
+</script>
+</body>
+</html>
