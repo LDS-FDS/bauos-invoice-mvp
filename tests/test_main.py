@@ -209,6 +209,47 @@ def test_marking_bezahlt_files_invoice_into_three_locations(client, monkeypatch,
     ).exists()
 
 
+def test_parse_detects_gutschrift_and_uses_gus_filename(client, monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        main_module, "_extract_text_from_pdf", lambda file_bytes: "GUTSCHRIFT\nsome text"
+    )
+    monkeypatch.setattr(
+        main_module,
+        "parse_invoice_text",
+        lambda text: InvoiceData(
+            supplier="Brillux",
+            invoice_number="7182750",
+            invoice_date="29.06.2026",
+            total_amount=100.0,
+            currency="EUR",
+            due_date="10.07.2026",
+            skonto_percent=None,
+            skonto_date=None,
+            skonto_amount=None,
+            bank_account=None,
+            bank_name=None,
+        ),
+    )
+
+    parsed = client.post(
+        "/invoices/parse",
+        files={"file": ("gutschrift.pdf", b"%PDF-fake", "application/pdf")},
+    )
+
+    assert parsed.status_code == 200
+    assert parsed.json()["is_gutschrift"] is True
+
+    invoice_id = parsed.json()["id"]
+    filing_base = tmp_path / "1. CIDE"
+    client.put("/company-settings", json={"filing_base_path": str(filing_base)})
+
+    patched = client.patch(f"/invoices/{invoice_id}", json={"status": "bezahlt"})
+    assert patched.status_code == 200
+
+    expected_filename = "260629 GUS Brillux RE-NR. 7182750.pdf"
+    assert (filing_base / "03 Vertragspartner" / "Brillux" / expected_filename).exists()
+
+
 def test_invoice_status_rejects_invalid_value(client):
     invoice_id = db.save_invoice(SAMPLE_INVOICE)
     response = client.patch(f"/invoices/{invoice_id}", json={"status": "unbekannt"})

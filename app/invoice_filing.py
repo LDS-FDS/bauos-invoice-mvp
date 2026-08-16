@@ -59,8 +59,9 @@ def build_invoice_filename(invoice: dict, supplier_override: str | None = None) 
     invoice_number = _sanitize_filename_part(
         str(invoice.get("invoice_number") or invoice.get("id") or "unbekannt")
     )
+    doc_label = "GUS" if invoice.get("is_gutschrift") else "INV"
 
-    return f"{date_part} INV {supplier} RE-NR. {invoice_number}.pdf"
+    return f"{date_part} {doc_label} {supplier} RE-NR. {invoice_number}.pdf"
 
 
 def _supplier_name_override(supplier: str) -> str | None:

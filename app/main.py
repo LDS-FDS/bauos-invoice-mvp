@@ -136,6 +136,7 @@ async def parse_invoice(file: UploadFile):
             result = extract_invoice_with_ai(text)
 
     response = _build_response(result)
+    response["is_gutschrift"] = "gutschrift" in text.lower()
 
     INVOICE_FILES_DIR.mkdir(parents=True, exist_ok=True)
     stored_filename = invoice_filing.build_invoice_filename(response)
