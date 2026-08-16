@@ -237,6 +237,19 @@ td {
 }
 .skonto-tag.urgent { background: #f6c777; color: #6b4a10; }
 
+.gutschrift-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: #e3d3f2;
+  color: #5a2d82;
+  white-space: nowrap;
+}
+
 .badge {
   display: inline-block;
   padding: 3px 10px;

@@ -19,6 +19,7 @@
       <button class="beleg-sidebar-item" data-filter="offene">Offene <span class="sidebar-badge" data-badge="offene"></span></button>
       <button class="beleg-sidebar-item" data-filter="ueberfaellige">Überfällige <span class="sidebar-badge warn" data-badge="ueberfaellige"></span></button>
       <button class="beleg-sidebar-item" data-filter="skonto">Skonto läuft ab <span class="sidebar-badge urgent" data-badge="skonto"></span></button>
+      <button class="beleg-sidebar-item" data-filter="gutschrift">Gutschrift <span class="sidebar-badge" data-badge="gutschrift"></span></button>
       <button class="beleg-sidebar-item" data-filter="bezahlt">Bezahlt <span class="sidebar-badge" data-badge="bezahlt"></span></button>
       <button class="beleg-sidebar-item" data-filter="storniert">Storniert <span class="sidebar-badge" data-badge="storniert"></span></button>
       <button class="beleg-sidebar-item" data-filter="archiviert">Archiviert <span class="sidebar-badge" data-badge="archiviert"></span></button>
@@ -292,6 +293,7 @@
     if (invoice.status === "storniert") return "storniert";
     if (invoice.status === "archiviert") return "archiviert";
     if (invoice.status === "bezahlt") return "bezahlt";
+    if (invoice.is_gutschrift) return "gutschrift";
     const today = startOfToday();
     const due = parseGermanDate(invoice.due_date);
     if (due && due < today) return "ueberfaellige";
@@ -300,7 +302,7 @@
   }
 
   function renderSidebarBadges() {
-    const counts = { alle: allInvoices.length, offene: 0, ueberfaellige: 0, skonto: 0, bezahlt: 0, storniert: 0, archiviert: 0 };
+    const counts = { alle: allInvoices.length, offene: 0, ueberfaellige: 0, skonto: 0, gutschrift: 0, bezahlt: 0, storniert: 0, archiviert: 0 };
     for (const invoice of allInvoices) {
       const category = computeInvoiceCategory(invoice);
       counts[category] = (counts[category] || 0) + 1;
@@ -373,7 +375,7 @@
         <div class="beleg-card-main">
           <div class="beleg-card-supplier">${invoice.supplier || "–"}</div>
           <div class="beleg-card-meta">${invoice.invoice_number || "–"} · vom ${invoice.invoice_date || "–"}${dueText ? " · " + dueText : ""}</div>
-          <div class="beleg-card-tags">${skontoCellHtml(invoice)}</div>
+          <div class="beleg-card-tags">${invoice.is_gutschrift ? '<span class="gutschrift-tag">Gutschrift</span>' : ""}${skontoCellHtml(invoice)}</div>
         </div>
         <div class="beleg-card-right">
           <div class="beleg-card-amount">${amount}</div>
