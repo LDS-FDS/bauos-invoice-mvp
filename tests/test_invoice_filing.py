@@ -23,6 +23,19 @@ def test_build_invoice_filename_sanitizes_supplier_name():
     assert filename == "260101 INV Weird-Supplier- Name-- RE-NR. 123.pdf"
 
 
+def test_build_invoice_filename_uses_gus_for_gutschrift():
+    invoice = {
+        "invoice_date": "29.06.2026",
+        "supplier": "Brillux",
+        "invoice_number": "7182750",
+        "is_gutschrift": True,
+    }
+    assert (
+        invoice_filing.build_invoice_filename(invoice)
+        == "260629 GUS Brillux RE-NR. 7182750.pdf"
+    )
+
+
 def test_build_invoice_filename_falls_back_when_fields_missing():
     invoice = {"invoice_date": None, "supplier": None, "invoice_number": None, "id": 42}
     filename = invoice_filing.build_invoice_filename(invoice)
