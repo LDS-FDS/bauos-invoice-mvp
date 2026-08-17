@@ -105,6 +105,28 @@ def test_file_paid_invoice_reuses_existing_shorter_supplier_folder(tmp_path):
     ).exists()
 
 
+def test_file_paid_invoice_reuses_folder_via_override_when_no_substring_match(tmp_path):
+    source = tmp_path / "source.pdf"
+    source.write_bytes(b"content")
+
+    base = tmp_path / "1. CIDE"
+    (base / "03 Vertragspartner" / "Holz Possling").mkdir(parents=True)
+
+    invoice = {
+        "invoice_date": "14.08.2026",
+        "supplier": "Possling GmbH & Co.KG",
+        "invoice_number": "1260308700602",
+        "file_path": str(source),
+    }
+
+    written = invoice_filing.file_paid_invoice(invoice, str(base))
+
+    assert len(written) == 3
+    expected_filename = "260814 INV Holz Possling RE-NR. 1260308700602.pdf"
+    assert (base / "03 Vertragspartner" / "Holz Possling" / expected_filename).exists()
+    assert not (base / "03 Vertragspartner" / "Possling GmbH & Co.KG").exists()
+
+
 def test_file_paid_invoice_creates_new_folder_when_no_match_exists(tmp_path):
     source = tmp_path / "source.pdf"
     source.write_bytes(b"content")
