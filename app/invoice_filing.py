@@ -19,6 +19,7 @@ _GERMAN_MONTHS = [
 # extracted supplier name.
 _SUPPLIER_NAME_OVERRIDES: dict[str, str] = {
     "wego systembaustoffe gmbh": "wego",
+    "possling gmbh & co.kg": "Holz Possling",
 }
 
 
@@ -71,18 +72,27 @@ def _supplier_name_override(supplier: str) -> str | None:
 def _resolve_supplier_folder_name(supplier: str, base_path: str) -> str:
     """Reuse an existing Vertragspartner folder if the supplier name contains it
     (e.g. "Wego Systembaustoffe GmbH" -> existing folder "Wego"), instead of
-    creating a new folder from the full legal name every time."""
+    creating a new folder from the full legal name every time. For suppliers
+    whose extracted name doesn't share a substring with their real folder at
+    all (e.g. "Possling GmbH & Co.KG" -> existing folder "Holz Possling"),
+    fall back to the explicit override table."""
     sanitized = _sanitize_filename_part(supplier)
+    override = _supplier_name_override(supplier)
     vertragspartner_dir = Path(base_path) / "03 Vertragspartner"
     try:
         existing_folders = [p.name for p in vertragspartner_dir.iterdir() if p.is_dir()]
     except OSError:
-        return sanitized
+        return override or sanitized
+
+    if override:
+        for name in existing_folders:
+            if name.lower() == override.lower():
+                return name
 
     matches = [name for name in existing_folders if name.lower() in sanitized.lower()]
     if matches:
         return max(matches, key=len)
-    return sanitized
+    return override or sanitized
 
 
 def file_paid_invoice(invoice: dict, base_path: str | None) -> list[str]:
