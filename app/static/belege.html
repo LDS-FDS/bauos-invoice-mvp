@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>BauOS – Belege</title>
-<link rel="stylesheet" href="/assets/style.css?v=4">
+<link rel="stylesheet" href="/assets/style.css?v=7">
 </head>
 <body>
 <div id="appNav"></div>
@@ -21,9 +21,11 @@
         <input type="date" id="summaryTo">
       </div>
     </div>
-    <div class="kpi-grid" style="grid-template-columns: repeat(2, 1fr);">
+    <div class="kpi-grid">
       <div class="kpi-tile"><div class="label">Ausgegeben</div><div class="value" id="summaryOut">–</div></div>
       <div class="kpi-tile"><div class="label">Eingegangen (Gutschriften)</div><div class="value" id="summaryIn">–</div></div>
+      <div class="kpi-tile"><div class="label">Durch Skonto gespart</div><div class="value" id="summarySkontoSaved">–</div></div>
+      <div class="kpi-tile"><div class="label">Verpasstes Skonto</div><div class="value" id="summarySkontoMissed">–</div></div>
     </div>
   </div>
 
@@ -55,13 +57,41 @@
     <div class="beleg-detail" id="invoiceDetailPane">
       <p class="empty-hint" id="invoiceDetailEmpty">Rechnung auswählen, um Details zu sehen.</p>
       <div id="invoiceDetailContent" style="display:none">
-        <h3 id="dSupplier">–</h3>
-        <div class="result-row"><span class="result-label">Rechnungsnummer</span><span class="result-value" id="dNumber">–</span></div>
-        <div class="result-row"><span class="result-label">Rechnungsdatum</span><span class="result-value" id="dDate">–</span></div>
-        <div class="result-row"><span class="result-label">Betrag</span><span class="result-value" id="dAmount">–</span></div>
-        <div class="result-row"><span class="result-label">Zahlbar bis</span><span class="result-value" id="dDue">–</span></div>
-        <div class="result-row"><span class="result-label">Skonto</span><span class="result-value" id="dSkonto">–</span></div>
-        <div class="result-row"><span class="result-label">Ersparnis</span><span class="result-value" id="dSavings">–</span></div>
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <h3 id="dSupplier" style="margin:0;">–</h3>
+          <button type="button" class="btn-secondary" id="editInvoiceBtn" style="width:auto; margin:0; padding:5px 10px; font-size:0.78rem;">Bearbeiten</button>
+        </div>
+        <div id="dReadOnlyFields">
+          <div class="result-row"><span class="result-label">Rechnungsnummer</span><span class="result-value" id="dNumber">–</span></div>
+          <div class="result-row"><span class="result-label">Rechnungsdatum</span><span class="result-value" id="dDate">–</span></div>
+          <div class="result-row"><span class="result-label">Betrag</span><span class="result-value" id="dAmount">–</span></div>
+          <div class="result-row"><span class="result-label">Zahlbar bis</span><span class="result-value" id="dDue">–</span></div>
+          <div class="result-row"><span class="result-label">Skonto</span><span class="result-value" id="dSkonto">–</span></div>
+          <div class="result-row"><span class="result-label">Ersparnis</span><span class="result-value" id="dSavings">–</span></div>
+        </div>
+        <div id="dEditForm" style="display:none; margin-top:8px;">
+          <div class="form-grid">
+            <input type="text" id="editNumber" placeholder="Rechnungsnummer" class="span-2">
+            <div>
+              <label class="empty-hint" style="display:block; margin-bottom:4px;">Rechnungsdatum</label>
+              <input type="date" id="editInvoiceDate">
+            </div>
+            <div>
+              <label class="empty-hint" style="display:block; margin-bottom:4px;">Zahlbar bis</label>
+              <input type="date" id="editDueDate">
+            </div>
+            <input type="number" step="0.01" id="editTotalAmount" placeholder="Betrag (voll)">
+            <input type="number" step="0.01" id="editSkontoPercent" placeholder="Skonto %">
+            <div>
+              <label class="empty-hint" style="display:block; margin-bottom:4px;">Skonto-Datum</label>
+              <input type="date" id="editSkontoDate">
+            </div>
+            <input type="number" step="0.01" id="editAmountWithSkonto" placeholder="Betrag mit Skonto">
+          </div>
+          <button id="saveInvoiceEditBtn">Speichern</button>
+          <button type="button" class="btn-secondary" id="cancelInvoiceEditBtn">Abbrechen</button>
+          <div id="editStatus" class="status"></div>
+        </div>
         <label class="empty-hint" for="dProjectSelect" style="display:block; margin-top:10px;">Projekt</label>
         <select id="dProjectSelect"></select>
         <label class="empty-hint" for="dStatusSelect" style="display:block; margin-top:10px;">Status</label>
@@ -136,7 +166,7 @@
   </div>
 </main>
 
-<script src="/assets/common.js?v=2"></script>
+<script src="/assets/common.js?v=3"></script>
 <script>
   renderNav("/belege");
 
@@ -173,17 +203,30 @@
 
     let out = 0;
     let inc = 0;
+    let skontoSaved = 0;
+    let skontoMissed = 0;
     for (const invoice of allInvoices) {
       if (invoice.status !== "bezahlt" || !invoice.paid_date) continue;
       const paid = parseGermanDate(invoice.paid_date);
       if (!paid) continue;
       if (fromDate && paid < fromDate) continue;
       if (toDate && paid > toDate) continue;
-      if (invoice.is_gutschrift) inc += paidAmount(invoice);
-      else out += paidAmount(invoice);
+      if (invoice.is_gutschrift) {
+        inc += paidAmount(invoice);
+        continue;
+      }
+      out += paidAmount(invoice);
+
+      if (invoice.paid_with_skonto == null) continue;
+      if (invoice.skonto_percent == null || invoice.amount_with_skonto == null || invoice.total_amount == null) continue;
+      const potentialSaving = invoice.total_amount - invoice.amount_with_skonto;
+      if (invoice.paid_with_skonto) skontoSaved += potentialSaving;
+      else skontoMissed += potentialSaving;
     }
     document.getElementById("summaryOut").textContent = formatEuro(out);
     document.getElementById("summaryIn").textContent = formatEuro(inc);
+    document.getElementById("summarySkontoSaved").textContent = formatEuro(skontoSaved);
+    document.getElementById("summarySkontoMissed").textContent = formatEuro(skontoMissed);
   }
 
   const today = new Date();
@@ -470,6 +513,8 @@
 
     document.getElementById("invoiceDetailEmpty").style.display = "none";
     document.getElementById("invoiceDetailContent").style.display = "block";
+    document.getElementById("dEditForm").style.display = "none";
+    document.getElementById("dReadOnlyFields").style.display = "block";
 
     document.getElementById("dSupplier").textContent = invoice.supplier || "–";
     document.getElementById("dNumber").textContent = invoice.invoice_number || "–";
@@ -529,6 +574,64 @@
     }
   }
 
+  document.getElementById("editInvoiceBtn").addEventListener("click", () => {
+    const invoice = allInvoices.find((inv) => inv.id === selectedInvoiceId);
+    if (!invoice) return;
+    document.getElementById("editNumber").value = invoice.invoice_number || "";
+    document.getElementById("editInvoiceDate").value = toISODate(parseGermanDate(invoice.invoice_date));
+    document.getElementById("editDueDate").value = toISODate(parseGermanDate(invoice.due_date));
+    document.getElementById("editTotalAmount").value = invoice.total_amount ?? "";
+    document.getElementById("editSkontoPercent").value = invoice.skonto_percent ?? "";
+    document.getElementById("editSkontoDate").value = toISODate(parseGermanDate(invoice.skonto_date));
+    document.getElementById("editAmountWithSkonto").value = invoice.amount_with_skonto ?? "";
+    document.getElementById("editStatus").textContent = "";
+    document.getElementById("dReadOnlyFields").style.display = "none";
+    document.getElementById("dEditForm").style.display = "block";
+  });
+
+  document.getElementById("cancelInvoiceEditBtn").addEventListener("click", () => {
+    document.getElementById("dEditForm").style.display = "none";
+    document.getElementById("dReadOnlyFields").style.display = "block";
+  });
+
+  document.getElementById("saveInvoiceEditBtn").addEventListener("click", async () => {
+    const statusEl = document.getElementById("editStatus");
+    const totalAmount = parseFloat(document.getElementById("editTotalAmount").value);
+    if (Number.isNaN(totalAmount)) {
+      statusEl.textContent = "Bitte einen gültigen Betrag angeben.";
+      statusEl.className = "status error";
+      return;
+    }
+    const skontoPercentRaw = document.getElementById("editSkontoPercent").value;
+    const amountWithSkontoRaw = document.getElementById("editAmountWithSkonto").value;
+    const payload = {
+      invoice_number: document.getElementById("editNumber").value.trim() || null,
+      invoice_date: toGermanDate(document.getElementById("editInvoiceDate").value),
+      total_amount: totalAmount,
+      due_date: toGermanDate(document.getElementById("editDueDate").value),
+      skonto_percent: skontoPercentRaw ? parseFloat(skontoPercentRaw) : null,
+      skonto_date: toGermanDate(document.getElementById("editSkontoDate").value),
+      amount_with_skonto: amountWithSkontoRaw ? parseFloat(amountWithSkontoRaw) : null,
+    };
+
+    const response = await fetch(`/invoices/${selectedInvoiceId}/details`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      statusEl.textContent = "Fehler beim Speichern.";
+      statusEl.className = "status error";
+      return;
+    }
+
+    statusEl.textContent = "";
+    document.getElementById("dEditForm").style.display = "none";
+    document.getElementById("dReadOnlyFields").style.display = "block";
+    await loadInvoices();
+  });
+
   document.getElementById("dProjectSelect").addEventListener("change", async (e) => {
     const projectId = e.target.value ? parseInt(e.target.value, 10) : null;
     await fetch(`/invoices/${e.target.dataset.id}/project`, {
@@ -542,8 +645,9 @@
   function askSkontoChoice(invoice) {
     return new Promise((resolve) => {
       const overlay = document.getElementById("skontoChoiceOverlay");
+      const untilText = invoice.skonto_date ? ` bis ${invoice.skonto_date}` : "";
       document.getElementById("skontoChoiceText").textContent =
-        `${invoice.skonto_percent}% Skonto bis ${invoice.skonto_date} verfügbar.`;
+        `${invoice.skonto_percent}% Skonto${untilText} verfügbar.`;
       const yesBtn = document.getElementById("skontoChoiceYes");
       const noBtn = document.getElementById("skontoChoiceNo");
       yesBtn.textContent = `Ja, mit Skonto (${formatEuro(invoice.amount_with_skonto)})`;
