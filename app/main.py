@@ -208,6 +208,23 @@ def delete_invoice(invoice_id: int) -> dict:
     return {"deleted": invoice_id}
 
 
+class InvoiceDetailsUpdate(BaseModel):
+    invoice_number: str | None = None
+    invoice_date: str | None = None
+    total_amount: float | None = None
+    due_date: str | None = None
+    skonto_percent: float | None = None
+    skonto_date: str | None = None
+    amount_with_skonto: float | None = None
+
+
+@app.put("/invoices/{invoice_id}/details")
+def update_invoice_details(invoice_id: int, body: InvoiceDetailsUpdate) -> dict:
+    if not db.update_invoice_fields(invoice_id, body.model_dump()):
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    return db.get_invoice(invoice_id)
+
+
 class ProjectAssignment(BaseModel):
     project_id: int | None = None
 

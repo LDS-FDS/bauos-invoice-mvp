@@ -115,3 +115,35 @@ def test_assign_invoice_project_unknown_id_returns_false(tmp_path):
     db_path = tmp_path / "test.db"
     db.init_db(db_path)
     assert db.assign_invoice_project(9999, None, db_path) is False
+
+
+def test_update_invoice_fields(tmp_path):
+    db_path = tmp_path / "test.db"
+    db.init_db(db_path)
+    invoice_id = db.save_invoice(SAMPLE_DATA, db_path)
+
+    updated = db.update_invoice_fields(
+        invoice_id,
+        {
+            "invoice_number": SAMPLE_DATA["invoice_number"],
+            "invoice_date": SAMPLE_DATA["invoice_date"],
+            "total_amount": 173.73,
+            "due_date": SAMPLE_DATA["due_date"],
+            "skonto_percent": 6.6,
+            "skonto_date": SAMPLE_DATA["skonto_date"],
+            "amount_with_skonto": 162.27,
+        },
+        db_path,
+    )
+
+    stored = db.get_invoice(invoice_id, db_path)
+    assert updated is True
+    assert stored["total_amount"] == 173.73
+    assert stored["amount_with_skonto"] == 162.27
+    assert stored["skonto_percent"] == 6.6
+
+
+def test_update_invoice_fields_unknown_id_returns_false(tmp_path):
+    db_path = tmp_path / "test.db"
+    db.init_db(db_path)
+    assert db.update_invoice_fields(9999, {"total_amount": 100.0}, db_path) is False

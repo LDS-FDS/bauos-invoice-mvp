@@ -161,6 +161,32 @@ def update_status(
         conn.close()
 
 
+_EDITABLE_COLUMNS = [
+    "invoice_number",
+    "invoice_date",
+    "total_amount",
+    "due_date",
+    "skonto_percent",
+    "skonto_date",
+    "amount_with_skonto",
+]
+
+
+def update_invoice_fields(invoice_id: int, data: dict, db_path: Path | None = None) -> bool:
+    conn = get_connection(db_path)
+    try:
+        assignments = ", ".join(f"{col} = :{col}" for col in _EDITABLE_COLUMNS)
+        params = {col: data.get(col) for col in _EDITABLE_COLUMNS}
+        params["id"] = invoice_id
+        cursor = conn.execute(
+            f"UPDATE invoices SET {assignments} WHERE id = :id", params
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+    finally:
+        conn.close()
+
+
 def delete_invoice(invoice_id: int, db_path: Path | None = None) -> bool:
     conn = get_connection(db_path)
     try:

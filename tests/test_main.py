@@ -134,6 +134,33 @@ def test_marking_bezahlt_records_paid_with_skonto_and_paid_date(client):
     assert body["paid_date"] is not None
 
 
+def test_update_invoice_details(client):
+    invoice_id = db.save_invoice(SAMPLE_INVOICE)
+
+    response = client.put(
+        f"/invoices/{invoice_id}/details",
+        json={
+            "invoice_number": SAMPLE_INVOICE["invoice_number"],
+            "invoice_date": SAMPLE_INVOICE["invoice_date"],
+            "total_amount": 173.73,
+            "due_date": SAMPLE_INVOICE["due_date"],
+            "skonto_percent": 6.6,
+            "skonto_date": "01.02.2026",
+            "amount_with_skonto": 162.27,
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total_amount"] == 173.73
+    assert body["amount_with_skonto"] == 162.27
+
+
+def test_update_invoice_details_unknown_id_returns_404(client):
+    response = client.put("/invoices/999999/details", json={"total_amount": 100.0})
+    assert response.status_code == 404
+
+
 def test_export_invoices_pdf(client):
     db.save_invoice(SAMPLE_INVOICE)
 
