@@ -121,6 +121,19 @@ def test_invoice_status_lifecycle(client):
     assert client.get("/invoices").json() == []
 
 
+def test_marking_bezahlt_records_paid_with_skonto_and_paid_date(client):
+    invoice_id = db.save_invoice(SAMPLE_INVOICE)
+
+    patched = client.patch(
+        f"/invoices/{invoice_id}", json={"status": "bezahlt", "paid_with_skonto": True}
+    )
+
+    assert patched.status_code == 200
+    body = patched.json()
+    assert body["paid_with_skonto"] == 1
+    assert body["paid_date"] is not None
+
+
 def test_export_invoices_pdf(client):
     db.save_invoice(SAMPLE_INVOICE)
 

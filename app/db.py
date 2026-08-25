@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+from datetime import date
 from pathlib import Path
 
 DEFAULT_DB_PATH = Path(__file__).resolve().parent.parent / "bauos.db"
@@ -64,6 +65,8 @@ def init_db(db_path: Path | None = None) -> None:
         _add_column_if_missing(conn, "invoices", "project_id", "INTEGER REFERENCES projects(id)")
         _add_column_if_missing(conn, "invoices", "file_path", "TEXT")
         _add_column_if_missing(conn, "invoices", "is_gutschrift", "INTEGER DEFAULT 0")
+        _add_column_if_missing(conn, "invoices", "paid_with_skonto", "INTEGER")
+        _add_column_if_missing(conn, "invoices", "paid_date", "TEXT")
         conn.commit()
     finally:
         conn.close()
@@ -126,12 +129,32 @@ def get_invoice(invoice_id: int, db_path: Path | None = None) -> dict | None:
         conn.close()
 
 
-def update_status(invoice_id: int, status: str, db_path: Path | None = None) -> bool:
+def update_status(
+    invoice_id: int,
+    status: str,
+    paid_with_skonto: bool | None = None,
+    db_path: Path | None = None,
+) -> bool:
     conn = get_connection(db_path)
     try:
-        cursor = conn.execute(
-            "UPDATE invoices SET status = ? WHERE id = ?", (status, invoice_id)
-        )
+        if status == "bezahlt":
+            cursor = conn.execute(
+                """
+                UPDATE invoices
+                SET status = ?, paid_with_skonto = ?, paid_date = COALESCE(paid_date, ?)
+                WHERE id = ?
+                """,
+                (
+                    status,
+                    None if paid_with_skonto is None else int(paid_with_skonto),
+                    date.today().strftime("%d.%m.%Y"),
+                    invoice_id,
+                ),
+            )
+        else:
+            cursor = conn.execute(
+                "UPDATE invoices SET status = ? WHERE id = ?", (status, invoice_id)
+            )
         conn.commit()
         return cursor.rowcount > 0
     finally:

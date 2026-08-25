@@ -43,7 +43,7 @@ def test_update_status(tmp_path):
     db.init_db(db_path)
     invoice_id = db.save_invoice(SAMPLE_DATA, db_path)
 
-    updated = db.update_status(invoice_id, "bezahlt", db_path)
+    updated = db.update_status(invoice_id, "bezahlt", db_path=db_path)
 
     assert updated is True
     assert db.get_invoice(invoice_id, db_path)["status"] == "bezahlt"
@@ -53,7 +53,34 @@ def test_update_status_unknown_id_returns_false(tmp_path):
     db_path = tmp_path / "test.db"
     db.init_db(db_path)
 
-    assert db.update_status(9999, "bezahlt", db_path) is False
+    assert db.update_status(9999, "bezahlt", db_path=db_path) is False
+
+
+def test_update_status_to_bezahlt_sets_paid_date_and_skonto_flag(tmp_path):
+    db_path = tmp_path / "test.db"
+    db.init_db(db_path)
+    invoice_id = db.save_invoice(SAMPLE_DATA, db_path)
+
+    db.update_status(invoice_id, "bezahlt", paid_with_skonto=True, db_path=db_path)
+
+    stored = db.get_invoice(invoice_id, db_path)
+    assert stored["paid_with_skonto"] == 1
+    assert stored["paid_date"] is not None
+
+
+def test_update_status_does_not_overwrite_existing_paid_date(tmp_path):
+    db_path = tmp_path / "test.db"
+    db.init_db(db_path)
+    invoice_id = db.save_invoice(SAMPLE_DATA, db_path)
+
+    db.update_status(invoice_id, "bezahlt", paid_with_skonto=True, db_path=db_path)
+    first_paid_date = db.get_invoice(invoice_id, db_path)["paid_date"]
+
+    db.update_status(invoice_id, "bezahlt", paid_with_skonto=False, db_path=db_path)
+    stored = db.get_invoice(invoice_id, db_path)
+
+    assert stored["paid_date"] == first_paid_date
+    assert stored["paid_with_skonto"] == 0
 
 
 def test_delete_invoice(tmp_path):
