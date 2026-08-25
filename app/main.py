@@ -165,11 +165,12 @@ def export_invoices_pdf() -> Response:
 
 class StatusUpdate(BaseModel):
     status: Literal["offen", "bezahlt", "storniert", "archiviert"]
+    paid_with_skonto: bool | None = None
 
 
 @app.patch("/invoices/{invoice_id}")
 def update_invoice_status(invoice_id: int, body: StatusUpdate) -> dict:
-    if not db.update_status(invoice_id, body.status):
+    if not db.update_status(invoice_id, body.status, body.paid_with_skonto):
         raise HTTPException(status_code=404, detail="Invoice not found")
 
     invoice = db.get_invoice(invoice_id)

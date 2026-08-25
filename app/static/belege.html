@@ -4,13 +4,28 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>BauOS – Belege</title>
-<link rel="stylesheet" href="/assets/style.css?v=2">
+<link rel="stylesheet" href="/assets/style.css?v=4">
 </head>
 <body>
 <div id="appNav"></div>
 <main>
   <h1>Belege</h1>
   <p class="subtitle">Eingehende Rechnungen erkennen, verwalten und ablegen.</p>
+
+  <div class="card">
+    <div class="card-header">
+      <h2>Übersicht</h2>
+      <div class="summary-range">
+        <input type="date" id="summaryFrom">
+        <span>–</span>
+        <input type="date" id="summaryTo">
+      </div>
+    </div>
+    <div class="kpi-grid" style="grid-template-columns: repeat(2, 1fr);">
+      <div class="kpi-tile"><div class="label">Ausgegeben</div><div class="value" id="summaryOut">–</div></div>
+      <div class="kpi-tile"><div class="label">Eingegangen (Gutschriften)</div><div class="value" id="summaryIn">–</div></div>
+    </div>
+  </div>
 
   <div class="beleg-layout">
     <div class="beleg-sidebar" id="invoiceSidebar">
@@ -51,6 +66,7 @@
         <select id="dProjectSelect"></select>
         <label class="empty-hint" for="dStatusSelect" style="display:block; margin-top:10px;">Status</label>
         <select id="dStatusSelect"></select>
+        <div class="result-row" id="dPaidRow" style="display:none"><span class="result-label">Bezahlt am</span><span class="result-value" id="dPaidDate">–</span></div>
         <div id="dFilingInfo" class="status" style="display:none"></div>
         <div class="beleg-detail-pdf" id="dPdfWrapper" style="display:none">
           <a id="dPdfOpenLink" class="btn-secondary btn-export" target="_blank" rel="noopener" style="display:block; text-align:center; margin-bottom:8px;">PDF in neuem Tab öffnen</a>
@@ -109,6 +125,15 @@
       <ul class="skonto-reminder-list" id="skontoReminderList"></ul>
     </div>
   </div>
+
+  <div class="modal-overlay" id="skontoChoiceOverlay">
+    <div class="modal-dialog" style="max-width:420px;">
+      <h2>Mit Skonto bezahlt?</h2>
+      <p class="empty-hint" id="skontoChoiceText"></p>
+      <button id="skontoChoiceYes" class="btn-secondary" style="margin-bottom:8px;"></button>
+      <button id="skontoChoiceNo" class="btn-secondary"></button>
+    </div>
+  </div>
 </main>
 
 <script src="/assets/common.js?v=2"></script>
@@ -130,6 +155,42 @@
       .join("");
     return `<option value="">–</option>${options}`;
   }
+
+  // --- Monats-/Zeitraum-Übersicht ---
+  function paidAmount(invoice) {
+    if (invoice.paid_with_skonto && invoice.amount_with_skonto != null) return invoice.amount_with_skonto;
+    return invoice.total_amount ?? 0;
+  }
+
+  function firstDayOfMonth(d) { return new Date(d.getFullYear(), d.getMonth(), 1); }
+  function lastDayOfMonth(d) { return new Date(d.getFullYear(), d.getMonth() + 1, 0); }
+
+  function updateSummaryBar() {
+    const fromValue = document.getElementById("summaryFrom").value;
+    const toValue = document.getElementById("summaryTo").value;
+    const fromDate = fromValue ? parseGermanDate(toGermanDate(fromValue)) : null;
+    const toDate = toValue ? parseGermanDate(toGermanDate(toValue)) : null;
+
+    let out = 0;
+    let inc = 0;
+    for (const invoice of allInvoices) {
+      if (invoice.status !== "bezahlt" || !invoice.paid_date) continue;
+      const paid = parseGermanDate(invoice.paid_date);
+      if (!paid) continue;
+      if (fromDate && paid < fromDate) continue;
+      if (toDate && paid > toDate) continue;
+      if (invoice.is_gutschrift) inc += paidAmount(invoice);
+      else out += paidAmount(invoice);
+    }
+    document.getElementById("summaryOut").textContent = formatEuro(out);
+    document.getElementById("summaryIn").textContent = formatEuro(inc);
+  }
+
+  const today = new Date();
+  document.getElementById("summaryFrom").valueAsDate = firstDayOfMonth(today);
+  document.getElementById("summaryTo").valueAsDate = lastDayOfMonth(today);
+  document.getElementById("summaryFrom").addEventListener("change", updateSummaryBar);
+  document.getElementById("summaryTo").addEventListener("change", updateSummaryBar);
 
   const dropzone = document.getElementById("dropzone");
   const fileInput = document.getElementById("fileInput");
@@ -342,6 +403,7 @@
     list.innerHTML = "";
 
     renderSidebarBadges();
+    updateSummaryBar();
 
     const term = invoiceSearchTerm.trim().toLowerCase();
     const invoices = allInvoices
@@ -442,6 +504,15 @@
       (s) => `<option value="${s}" ${s === invoice.status ? "selected" : ""}>${s}</option>`
     ).join("");
 
+    const paidRow = document.getElementById("dPaidRow");
+    if (invoice.status === "bezahlt" && invoice.paid_date) {
+      const skontoNote = invoice.paid_with_skonto == null ? "" : invoice.paid_with_skonto ? " (mit Skonto)" : " (ohne Skonto)";
+      document.getElementById("dPaidDate").textContent = `${invoice.paid_date}${skontoNote}`;
+      paidRow.style.display = "flex";
+    } else {
+      paidRow.style.display = "none";
+    }
+
     document.getElementById("dFilingInfo").style.display = "none";
 
     const pdfWrapper = document.getElementById("dPdfWrapper");
@@ -468,12 +539,37 @@
     await loadInvoices();
   });
 
-  document.getElementById("dStatusSelect").addEventListener("change", async (e) => {
-    const newStatus = e.target.value;
-    const response = await fetch(`/invoices/${e.target.dataset.id}`, {
+  function askSkontoChoice(invoice) {
+    return new Promise((resolve) => {
+      const overlay = document.getElementById("skontoChoiceOverlay");
+      document.getElementById("skontoChoiceText").textContent =
+        `${invoice.skonto_percent}% Skonto bis ${invoice.skonto_date} verfügbar.`;
+      const yesBtn = document.getElementById("skontoChoiceYes");
+      const noBtn = document.getElementById("skontoChoiceNo");
+      yesBtn.textContent = `Ja, mit Skonto (${formatEuro(invoice.amount_with_skonto)})`;
+      noBtn.textContent = `Nein, voller Betrag (${formatEuro(invoice.total_amount)})`;
+
+      const cleanup = (result) => {
+        yesBtn.onclick = null;
+        noBtn.onclick = null;
+        document.removeEventListener("keydown", onEscape);
+        closeModal(overlay);
+        resolve(result);
+      };
+      const onEscape = (ev) => { if (ev.key === "Escape") cleanup(null); };
+
+      yesBtn.onclick = () => cleanup(true);
+      noBtn.onclick = () => cleanup(false);
+      document.addEventListener("keydown", onEscape);
+      openModal(overlay);
+    });
+  }
+
+  async function applyInvoiceStatus(invoiceId, newStatus, paidWithSkonto) {
+    const response = await fetch(`/invoices/${invoiceId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: newStatus }),
+      body: JSON.stringify({ status: newStatus, paid_with_skonto: paidWithSkonto }),
     });
     const updated = await response.json();
     await loadInvoices();
@@ -488,6 +584,24 @@
       filingInfo.className = "status";
       filingInfo.style.display = "block";
     }
+  }
+
+  document.getElementById("dStatusSelect").addEventListener("change", async (e) => {
+    const newStatus = e.target.value;
+    const invoiceId = e.target.dataset.id;
+    const invoice = allInvoices.find((inv) => inv.id === parseInt(invoiceId, 10));
+
+    if (newStatus === "bezahlt" && invoice && invoice.skonto_percent != null && invoice.amount_with_skonto != null) {
+      const paidWithSkonto = await askSkontoChoice(invoice);
+      if (paidWithSkonto === null) {
+        updateInvoiceDetail(invoice.id);
+        return;
+      }
+      await applyInvoiceStatus(invoiceId, newStatus, paidWithSkonto);
+      return;
+    }
+
+    await applyInvoiceStatus(invoiceId, newStatus, null);
   });
 
   document.getElementById("invoiceList").addEventListener("click", (e) => {
