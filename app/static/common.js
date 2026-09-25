@@ -82,7 +82,15 @@ const NAV_ITEMS = [
     ],
   },
   { label: "Lohn", href: "/lohn" },
-  { label: "Ausbauplan (Beta)", href: "/ausbauplan" },
+  {
+    label: "Ausbauplan (Beta)",
+    items: [
+      { label: "Angebote", href: "/ausbauplan#angebote" },
+      { label: "Rechnungen", href: "/ausbauplan#rechnungen" },
+      { label: "Baustellen", href: "/ausbauplan#baustellen" },
+      { label: "Team", href: "/ausbauplan#team" },
+    ],
+  },
 ];
 
 function renderNav(activePath) {

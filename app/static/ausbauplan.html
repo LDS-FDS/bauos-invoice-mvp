@@ -1354,8 +1354,23 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
     });
   }
   tabs.forEach(function (b) {
-    b.addEventListener("click", function () { switchTopTab(b.dataset.view); });
+    b.addEventListener("click", function () {
+      switchTopTab(b.dataset.view);
+      if (window.history && window.history.replaceState) {
+        window.history.replaceState(null, "", "#" + b.dataset.view);
+      }
+    });
   });
+
+  // Direkter Sprung zu einem Unterbereich, wenn z. B. über die BauOS-Navigation
+  // mit #rechnungen, #baustellen oder #team verlinkt wurde.
+  (function applyInitialViewFromHash() {
+    var validViews = ["angebote", "rechnungen", "baustellen", "team"];
+    var fromHash = (window.location.hash || "").replace("#", "");
+    if (validViews.indexOf(fromHash) !== -1) {
+      switchTopTab(fromHash);
+    }
+  })();
 
   // ---------- Baustellen: Sub-Navigation (Controlling / Eingangsrechnungen / Mitarbeiterzeiten) ----------
   var bsubtabs = document.querySelectorAll("#bsubtabs button");
