@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Ausbauplan</title>
+<link rel="stylesheet" href="/assets/style.css?v=11">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Poppins:wght@400;500;600;700;800&display=swap">
@@ -73,23 +74,6 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
   ::selection { background: var(--blue-tint-2); color: var(--ink); }
   :focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; border-radius: 4px; }
   button { font-family: inherit; }
-
-  .bauos-subnav { background: var(--blue-tint); border-bottom: 1px solid var(--border); }
-  .bauos-subnav-inner { max-width: 1120px; margin: 0 auto; padding: 7px 20px; display: flex; gap: 3px; flex-wrap: wrap; }
-  .bauos-subnav-inner a { font-family: system-ui, sans-serif; font-size: 0.76rem; font-weight: 600; color: var(--blue-strong); text-decoration: none; padding: 5px 11px; border-radius: 999px; white-space: nowrap; }
-  .bauos-subnav-inner a:hover { background: var(--blue-tint-2); }
-  .bauos-subnav-inner a.active { background: var(--blue-strong); color: var(--on-blue); }
-  .topbar { position: sticky; top: 0; z-index: 20; background: var(--topbar-bg); backdrop-filter: blur(8px); border-bottom: 1px solid var(--border); }
-  .topbar-inner { max-width: 1120px; margin: 0 auto; padding: 12px 20px; display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
-  .brand { display: flex; align-items: center; gap: 9px; }
-  .brand-mark { width: 32px; height: 32px; border-radius: 9px; background: var(--topbar-chip-bg); display: flex; align-items: center; justify-content: center; flex: 0 0 auto; }
-  .brand-mark svg { width: 18px; height: 18px; stroke: var(--topbar-ink); fill: none; stroke-width: 2; }
-  .brand-name { font-family: "Big Shoulders Display", sans-serif; font-weight: 800; font-size: 1.4rem; color: var(--topbar-ink); }
-  .brand-tag { font-size: 0.66rem; color: var(--topbar-ink-soft); font-family: "IBM Plex Mono", monospace; margin-top: -3px; }
-  .tabs { display: flex; gap: 2px; flex-wrap: wrap; }
-  .tabs button { border: none; background: none; color: var(--topbar-ink-soft); padding: 8px 13px; border-radius: 999px; font-size: 0.83rem; font-weight: 600; cursor: pointer; }
-  .tabs button.active { background: var(--topbar-active-bg); color: var(--topbar-active-ink); }
-  .tabs button:hover:not(.active) { background: var(--topbar-hover-bg); color: var(--topbar-ink); }
 
   .wrap { max-width: 1120px; margin: 0 auto; padding: 30px 20px 60px; }
   .hero { padding: 6px 0 26px; }
@@ -434,7 +418,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
   @page { size: A4; margin: 0; }
 
   @media print {
-    .bauos-subnav, .topbar, .wrap, footer { display: none !important; }
+    #appNav, .wrap, footer { display: none !important; }
     .pdf-overlay { display: block; position: static; background: #fff; padding: 0; overflow: visible; }
     .pdf-toolbar { display: none; }
     #pdfProbe { display: none; }
@@ -762,34 +746,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 </style>
 </head>
 <body>
-<div class="bauos-subnav">
-  <div class="bauos-subnav-inner">
-    <a href="/">Dashboard</a>
-    <a href="/belege">Belege</a>
-    <a href="/finanzen">Finanzen</a>
-    <a href="/kontakte">Kontakte</a>
-    <a href="/artikel">Artikel</a>
-    <a href="/baustellen">Baustellen</a>
-    <a href="/rechnungen-schreiben">Rechnungen schreiben</a>
-    <a href="/lohn">Lohn</a>
-    <a href="/ausbauplan" class="active">Ausbauplan</a>
-  </div>
-</div>
-
-<div class="topbar">
-  <div class="topbar-inner">
-    <div class="brand">
-      <div class="brand-mark"><svg viewBox="0 0 24 24"><path d="M3 21h18M5 21V9l7-6 7 6v12"/><path d="M10 21v-6h4v6"/></svg></div>
-      <div><div class="brand-name">Ausbauplan</div><div class="brand-tag">für BauOS &amp; Bautakt</div></div>
-    </div>
-    <div class="tabs" id="tabs">
-      <button data-view="angebote" class="active">Angebote</button>
-      <button data-view="rechnungen">Rechnungen</button>
-      <button data-view="baustellen">Baustellen</button>
-      <button data-view="team">Team</button>
-    </div>
-  </div>
-</div>
+<div id="appNav"></div>
 
 <div class="wrap">
 
@@ -1346,31 +1303,27 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
   }
 
   // ---------- tabs ----------
-  var tabs = document.querySelectorAll("#tabs button");
+  // Die vier Bereiche (Angebote/Rechnungen/Baustellen/Team) werden jetzt nur
+  // noch ueber das "Ausbauplan (Beta)"-Dropdown in der normalen BauOS-Navigation
+  // angesteuert (wie bei Finanzen/Buchhaltung), nicht mehr ueber eigene Reiter.
   function switchTopTab(view) {
-    tabs.forEach(function (t) { t.classList.toggle("active", t.dataset.view === view); });
     document.querySelectorAll("section.view").forEach(function (v) {
       v.classList.toggle("active", v.id === "view-" + view);
     });
   }
-  tabs.forEach(function (b) {
-    b.addEventListener("click", function () {
-      switchTopTab(b.dataset.view);
-      if (window.history && window.history.replaceState) {
-        window.history.replaceState(null, "", "#" + b.dataset.view);
-      }
-    });
-  });
 
-  // Direkter Sprung zu einem Unterbereich, wenn z. B. über die BauOS-Navigation
-  // mit #rechnungen, #baustellen oder #team verlinkt wurde.
-  (function applyInitialViewFromHash() {
+  // Bereich anhand des URL-Hash setzen (#angebote / #rechnungen / #baustellen / #team) -
+  // sowohl beim ersten Laden als auch wenn sich der Hash aendert (z. B. Klick auf
+  // einen anderen Punkt im Ausbauplan-Dropdown, waehrend die Seite schon offen ist).
+  function applyViewFromHash() {
     var validViews = ["angebote", "rechnungen", "baustellen", "team"];
     var fromHash = (window.location.hash || "").replace("#", "");
     if (validViews.indexOf(fromHash) !== -1) {
       switchTopTab(fromHash);
     }
-  })();
+  }
+  applyViewFromHash();
+  window.addEventListener("hashchange", applyViewFromHash);
 
   // ---------- Baustellen: Sub-Navigation (Controlling / Eingangsrechnungen / Mitarbeiterzeiten) ----------
   var bsubtabs = document.querySelectorAll("#bsubtabs button");
@@ -6266,6 +6219,10 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
     }
   } catch (e) {}
 })();
+</script>
+<script src="/assets/common.js?v=7"></script>
+<script>
+  renderNav("/ausbauplan");
 </script>
 </body>
 </html>

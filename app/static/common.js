@@ -102,7 +102,9 @@ function renderNav(activePath) {
 
   for (const item of NAV_ITEMS) {
     if (item.items) {
-      const isActive = item.items.some((sub) => sub.href === activePath);
+      const isActive = item.items.some(
+        (sub) => sub.href === activePath || sub.href.split("#")[0] === activePath
+      );
       const dropdown = document.createElement("div");
       dropdown.className = "app-nav-dropdown";
       dropdown.innerHTML = `

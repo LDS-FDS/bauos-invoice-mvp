@@ -45,6 +45,9 @@ h1 {
   width: 100%;
   background: var(--card);
   border-bottom: 1px solid var(--border);
+  /* Fixed font stack (not "inherit") so the nav looks identical even on a
+     page like Ausbauplan that sets its own body font for its own content. */
+  font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
 .app-nav-inner {
