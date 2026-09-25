@@ -4,7 +4,27 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>BauOS – Dashboard</title>
-<link rel="stylesheet" href="/assets/style.css?v=7">
+<link rel="stylesheet" href="/assets/style.css?v=10">
+<style>
+  .quick-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+  .quick-actions a {
+    width: auto; margin: 0; padding: 9px 14px; font-size: 0.85rem;
+    text-decoration: none; display: inline-block; border-radius: 7px;
+    background: var(--primary); color: white; font-weight: 600;
+  }
+  .quick-actions a:hover { background: var(--primary-dark); }
+  .dash-grid { display: grid; grid-template-columns: 1.3fr 1fr; gap: 14px; align-items: start; }
+  @media (max-width: 860px) { .dash-grid { grid-template-columns: 1fr; } }
+  .linked-list { display: flex; flex-direction: column; gap: 5px; }
+  .linked-row {
+    display: flex; justify-content: space-between; align-items: center; gap: 10px;
+    padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 0.85rem;
+  }
+  .linked-row.overdue { background: #f7e6e0; border-color: #e0bdb4; }
+  .linked-row .due-meta { color: var(--text-muted); font-size: 0.78rem; margin-top: 1px; }
+  .balance-row .value.negative { color: #b0554a; }
+  .balance-row .value.positive { color: #3d5c34; }
+</style>
 </head>
 <body>
 <div id="appNav"></div>
@@ -12,14 +32,123 @@
   <h1>Dashboard</h1>
   <p class="subtitle">Überblick über Baustellen, Belege und Zahlungen.</p>
 
+  <div class="quick-actions">
+    <a href="/belege">+ Neuer Beleg</a>
+    <a href="/rechnungen-schreiben">+ Angebot / Rechnung</a>
+    <a href="/baustellen">+ Neue Baustelle</a>
+  </div>
+
   <div class="card">
-    <div class="placeholder-card">Das Dashboard folgt noch.</div>
+    <div class="card-header"><h2>Eingangsrechnungen</h2></div>
+    <div class="kpi-grid" style="grid-template-columns: repeat(3, 1fr);">
+      <div class="kpi-tile"><div class="label">Offen</div><div class="value" id="kpiInvoicesOpen">–</div></div>
+      <div class="kpi-tile"><div class="label">Überfällig</div><div class="value" id="kpiInvoicesOverdue">–</div></div>
+      <div class="kpi-tile"><div class="label">Skonto läuft bald ab</div><div class="value" id="kpiSkontoSoon">–</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Rechnungen an Kunden</h2></div>
+    <div class="kpi-grid" style="grid-template-columns: repeat(3, 1fr);">
+      <div class="kpi-tile"><div class="label">Offene Forderungen</div><div class="value" id="kpiRevenueOpen">–</div></div>
+      <div class="kpi-tile"><div class="label">Überfällige Forderungen</div><div class="value" id="kpiRevenueOverdue">–</div></div>
+      <div class="kpi-tile"><div class="label">Entwürfe</div><div class="value" id="kpiDrafts">–</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Baustellen</h2></div>
+    <div class="kpi-grid" style="grid-template-columns: repeat(2, 1fr);">
+      <div class="kpi-tile"><div class="label">Aktive Baustellen</div><div class="value" id="kpiActiveProjects">–</div></div>
+      <div class="kpi-tile"><div class="label">Saldo gesamt</div><div class="value" id="kpiProjectsBalance">–</div></div>
+    </div>
+  </div>
+
+  <div class="dash-grid">
+    <div class="card">
+      <div class="card-header"><h2>Nächste Fälligkeiten (7 Tage)</h2></div>
+      <div id="upcomingList" class="linked-list">
+        <p class="empty-hint" id="upcomingEmptyHint">Keine Fälligkeiten in den nächsten 7 Tagen.</p>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header"><h2>Baustellen-Salden</h2></div>
+      <div id="balanceList" class="linked-list">
+        <p class="empty-hint" id="balanceEmptyHint">Keine aktiven Baustellen.</p>
+      </div>
+    </div>
   </div>
 </main>
 
-<script src="/assets/common.js?v=3"></script>
+<script src="/assets/common.js?v=5"></script>
 <script>
   renderNav("/");
+
+  function setKpi(id, text) {
+    document.getElementById(id).textContent = text;
+  }
+
+  async function loadDashboard() {
+    const summary = await (await fetch("/dashboard/summary")).json();
+
+    setKpi("kpiInvoicesOpen", `${summary.invoices_open_count} · ${formatEuro(summary.invoices_open_sum)}`);
+    setKpi("kpiInvoicesOverdue", `${summary.invoices_overdue_count} · ${formatEuro(summary.invoices_overdue_sum)}`);
+    setKpi(
+      "kpiSkontoSoon",
+      summary.invoices_skonto_soon_count > 0
+        ? `${summary.invoices_skonto_soon_count} · ${formatEuro(summary.invoices_skonto_soon_savings)} möglich`
+        : "0"
+    );
+
+    setKpi("kpiRevenueOpen", `${summary.revenue_open_count} · ${formatEuro(summary.revenue_open_sum)}`);
+    setKpi("kpiRevenueOverdue", `${summary.revenue_overdue_count} · ${formatEuro(summary.revenue_overdue_sum)}`);
+    setKpi("kpiDrafts", String(summary.drafts_count));
+
+    setKpi("kpiActiveProjects", String(summary.active_projects_count));
+    setKpi("kpiProjectsBalance", formatEuro(summary.active_projects_balance));
+
+    const upcomingList = document.getElementById("upcomingList");
+    const upcomingEmptyHint = document.getElementById("upcomingEmptyHint");
+    if (summary.upcoming.length === 0) {
+      upcomingList.innerHTML = "";
+      upcomingList.appendChild(upcomingEmptyHint);
+    } else {
+      upcomingList.innerHTML = summary.upcoming
+        .map((u) => {
+          const kindLabel = u.kind === "eingang" ? "Eingang" : "Ausgang";
+          return `
+            <div class="linked-row${u.overdue ? " overdue" : ""}">
+              <span>
+                ${u.label}${u.reference ? " · " + u.reference : ""}
+                <div class="due-meta">${kindLabel} · fällig ${u.due_date}${u.overdue ? " (überfällig)" : ""}</div>
+              </span>
+              <span>${formatEuro(u.amount || 0)}</span>
+            </div>
+          `;
+        })
+        .join("");
+    }
+
+    const balanceList = document.getElementById("balanceList");
+    const balanceEmptyHint = document.getElementById("balanceEmptyHint");
+    if (summary.project_balances.length === 0) {
+      balanceList.innerHTML = "";
+      balanceList.appendChild(balanceEmptyHint);
+    } else {
+      balanceList.innerHTML = summary.project_balances
+        .map(
+          (p) => `
+            <div class="linked-row balance-row">
+              <span>${p.name}</span>
+              <span class="value ${p.balance < 0 ? "negative" : "positive"}">${formatEuro(p.balance)}</span>
+            </div>
+          `
+        )
+        .join("");
+    }
+  }
+
+  loadDashboard();
 </script>
 </body>
 </html>

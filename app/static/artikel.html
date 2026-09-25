@@ -4,22 +4,189 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>BauOS – Artikel</title>
-<link rel="stylesheet" href="/assets/style.css?v=7">
+<link rel="stylesheet" href="/assets/style.css?v=10">
 </head>
 <body>
 <div id="appNav"></div>
 <main>
   <h1>Artikel</h1>
-  <p class="subtitle">Artikel- und Leistungskatalog für Angebote und Rechnungen.</p>
+  <p class="subtitle">Artikel- und Leistungskatalog für Angebote und Rechnungen. Einmal anlegen, dann beim Schreiben von Angeboten/Rechnungen per Klick übernehmen.</p>
 
   <div class="card">
-    <div class="placeholder-card">Der Artikel-Katalog folgt noch.</div>
+    <h2 id="articleFormTitle">Neuer Artikel</h2>
+    <div class="form-grid">
+      <input type="text" id="artDescription" placeholder="Beschreibung *" class="span-2">
+      <input type="text" id="artUnit" placeholder="Einheit (z.B. Stk., m², Std.)">
+      <input type="number" id="artUnitPrice" placeholder="Einzelpreis (€) *" min="0" step="0.01">
+      <input type="number" id="artTaxRate" placeholder="MwSt % (Standard 19)" min="0" step="0.1">
+    </div>
+    <button id="saveArticleBtn">Artikel speichern</button>
+    <button type="button" class="btn-secondary" id="cancelArticleEditBtn" style="display:none">Bearbeitung abbrechen</button>
+    <div id="articleStatus" class="status"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2>Artikelliste</h2>
+    </div>
+    <input type="text" id="articleSearch" class="beleg-search" placeholder="Suchen nach Beschreibung">
+    <div id="articleListWrapper">
+      <p class="empty-hint" id="articleEmptyHint">Noch keine Artikel angelegt.</p>
+      <table id="articleTable" style="display:none">
+        <thead>
+          <tr>
+            <th>Beschreibung</th>
+            <th>Einheit</th>
+            <th>Einzelpreis</th>
+            <th>MwSt %</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="articleTableBody"></tbody>
+      </table>
+    </div>
   </div>
 </main>
 
-<script src="/assets/common.js?v=3"></script>
+<script src="/assets/common.js?v=5"></script>
 <script>
   renderNav("/artikel");
+
+  let allArticles = [];
+  let editingArticleId = null;
+  let articleSearchTerm = "";
+
+  function matchesArticleSearch(article, term) {
+    if (!term) return true;
+    return article.description.toLowerCase().includes(term);
+  }
+
+  function renderArticleTable() {
+    const table = document.getElementById("articleTable");
+    const emptyHint = document.getElementById("articleEmptyHint");
+    const tbody = document.getElementById("articleTableBody");
+    tbody.innerHTML = "";
+
+    const term = articleSearchTerm.trim().toLowerCase();
+    const articles = allArticles.filter((a) => matchesArticleSearch(a, term));
+
+    if (articles.length === 0) {
+      table.style.display = "none";
+      emptyHint.style.display = "block";
+      emptyHint.textContent =
+        allArticles.length === 0
+          ? "Noch keine Artikel angelegt."
+          : "Keine Artikel für diese Suche.";
+      return;
+    }
+    table.style.display = "table";
+    emptyHint.style.display = "none";
+
+    for (const article of articles) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${article.description}</td>
+        <td>${article.unit || "–"}</td>
+        <td>${formatEuro(article.unit_price)}</td>
+        <td>${article.tax_rate}%</td>
+        <td class="row-actions">
+          <button class="btn-secondary" data-action="edit" data-id="${article.id}">Bearbeiten</button>
+          <button class="btn-danger" data-action="delete" data-id="${article.id}">Löschen</button>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    }
+  }
+
+  async function loadArticles() {
+    const response = await fetch("/articles");
+    allArticles = await response.json();
+    renderArticleTable();
+  }
+
+  function resetArticleForm() {
+    editingArticleId = null;
+    document.getElementById("articleFormTitle").textContent = "Neuer Artikel";
+    document.getElementById("saveArticleBtn").textContent = "Artikel speichern";
+    document.getElementById("cancelArticleEditBtn").style.display = "none";
+    document.getElementById("artDescription").value = "";
+    document.getElementById("artUnit").value = "";
+    document.getElementById("artUnitPrice").value = "";
+    document.getElementById("artTaxRate").value = "";
+  }
+
+  function startEditArticle(id) {
+    const article = allArticles.find((a) => a.id === id);
+    if (!article) return;
+    editingArticleId = id;
+    document.getElementById("articleFormTitle").textContent = "Artikel bearbeiten";
+    document.getElementById("saveArticleBtn").textContent = "Änderungen speichern";
+    document.getElementById("cancelArticleEditBtn").style.display = "block";
+    document.getElementById("artDescription").value = article.description;
+    document.getElementById("artUnit").value = article.unit || "";
+    document.getElementById("artUnitPrice").value = article.unit_price;
+    document.getElementById("artTaxRate").value = article.tax_rate;
+    document.getElementById("artDescription").scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
+  document.getElementById("cancelArticleEditBtn").addEventListener("click", resetArticleForm);
+
+  document.getElementById("saveArticleBtn").addEventListener("click", async () => {
+    const statusEl = document.getElementById("articleStatus");
+    const description = document.getElementById("artDescription").value.trim();
+    const unitPriceRaw = document.getElementById("artUnitPrice").value;
+    const unitPrice = parseFloat(unitPriceRaw);
+    if (!description || unitPriceRaw === "" || Number.isNaN(unitPrice)) {
+      statusEl.textContent = "Bitte Beschreibung und Einzelpreis angeben.";
+      statusEl.className = "status error";
+      return;
+    }
+    const taxRateRaw = document.getElementById("artTaxRate").value;
+    const payload = {
+      description,
+      unit: document.getElementById("artUnit").value.trim() || null,
+      unit_price: unitPrice,
+      tax_rate: taxRateRaw !== "" ? parseFloat(taxRateRaw) : 19.0,
+    };
+
+    const url = editingArticleId ? `/articles/${editingArticleId}` : "/articles";
+    const method = editingArticleId ? "PATCH" : "POST";
+    const response = await fetch(url, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      statusEl.textContent = "Fehler beim Speichern.";
+      statusEl.className = "status error";
+      return;
+    }
+
+    statusEl.textContent = "";
+    resetArticleForm();
+    await loadArticles();
+  });
+
+  document.getElementById("articleTableBody").addEventListener("click", async (e) => {
+    const btn = e.target.closest("button");
+    if (!btn) return;
+    const id = parseInt(btn.dataset.id, 10);
+    if (btn.dataset.action === "edit") {
+      startEditArticle(id);
+    } else if (btn.dataset.action === "delete") {
+      await fetch(`/articles/${id}`, { method: "DELETE" });
+      if (editingArticleId === id) resetArticleForm();
+      await loadArticles();
+    }
+  });
+
+  document.getElementById("articleSearch").addEventListener("input", (e) => {
+    articleSearchTerm = e.target.value;
+    renderArticleTable();
+  });
+
+  loadArticles();
 </script>
 </body>
 </html>

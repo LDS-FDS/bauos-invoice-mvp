@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>BauOS – Rechnungen schreiben</title>
-<link rel="stylesheet" href="/assets/style.css?v=7">
+<link rel="stylesheet" href="/assets/style.css?v=10">
 </head>
 <body>
 <div id="appNav"></div>
@@ -85,7 +85,7 @@
       </div>
 
       <div class="item-row-header">
-        <span>Beschreibung</span><span>Menge</span><span>Einheit</span><span>Einzelpreis</span><span>MwSt%</span><span></span>
+        <span>Artikel</span><span>Beschreibung</span><span>Menge</span><span>Einheit</span><span>Einzelpreis</span><span>MwSt%</span><span></span>
       </div>
       <div id="itemRows"></div>
       <button type="button" class="btn-add-item" id="addItemRowBtn">+ Position hinzufügen</button>
@@ -102,14 +102,26 @@
   </div>
 </main>
 
-<script src="/assets/common.js?v=3"></script>
+<script src="/assets/common.js?v=5"></script>
 <script>
   renderNav("/rechnungen-schreiben");
 
   let allProjects = [];
+  let allArticles = [];
 
   async function refreshProjectsCache() {
     allProjects = await (await fetch("/projects")).json();
+  }
+
+  async function refreshArticlesCache() {
+    allArticles = await (await fetch("/articles")).json();
+  }
+
+  function articleOptionsHtml() {
+    const options = allArticles
+      .map((a) => `<option value="${a.id}">${a.description}</option>`)
+      .join("");
+    return `<option value="">Aus Katalog...</option>${options}`;
   }
 
   function projectOptionsHtml(selectedId) {
@@ -190,6 +202,7 @@
     const row = document.createElement("div");
     row.className = "item-row";
     row.innerHTML = `
+      <select class="item-article">${articleOptionsHtml()}</select>
       <input type="text" class="item-desc" placeholder="Beschreibung" value="${values.description || ""}">
       <input type="number" class="item-qty" placeholder="1" step="0.01" value="${values.quantity ?? 1}">
       <input type="text" class="item-unit" placeholder="Stk." value="${values.unit || ""}">
@@ -199,6 +212,15 @@
     `;
     row.querySelector(".btn-remove-item").addEventListener("click", () => {
       row.remove();
+      updateTotals();
+    });
+    row.querySelector(".item-article").addEventListener("change", (e) => {
+      const article = allArticles.find((a) => a.id === parseInt(e.target.value, 10));
+      if (!article) return;
+      row.querySelector(".item-desc").value = article.description;
+      row.querySelector(".item-unit").value = article.unit || "";
+      row.querySelector(".item-price").value = article.unit_price;
+      row.querySelector(".item-tax").value = article.tax_rate;
       updateTotals();
     });
     row.querySelectorAll("input").forEach((input) => input.addEventListener("input", updateTotals));
@@ -406,9 +428,10 @@
     renderDocumentTable();
   });
 
-  addItemRow();
   loadCustomersIntoDocumentForm();
   loadDocuments();
+
+  refreshArticlesCache().then(() => addItemRow());
 
   refreshProjectsCache().then(() => {
     loadProjectsIntoDocumentForm();

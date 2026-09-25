@@ -29,7 +29,11 @@ function toISODate(date) {
 }
 
 function formatEuro(value) {
-  return `${value.toFixed(2).replace(".", ",")} €`;
+  const formatted = value.toLocaleString("de-DE", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  return `${formatted} €`;
 }
 
 function docTypeLabel(doc) {
@@ -78,6 +82,7 @@ const NAV_ITEMS = [
     ],
   },
   { label: "Lohn", href: "/lohn" },
+  { label: "Ausbauplan (Beta)", href: "/ausbauplan" },
 ];
 
 function renderNav(activePath) {

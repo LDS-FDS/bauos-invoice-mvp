@@ -89,7 +89,11 @@ def _resolve_supplier_folder_name(supplier: str, base_path: str) -> str:
             if name.lower() == override.lower():
                 return name
 
-    matches = [name for name in existing_folders if name.lower() in sanitized.lower()]
+    sanitized_lower = sanitized.lower()
+    matches = [
+        name for name in existing_folders
+        if re.search(r"\b" + re.escape(name.lower()) + r"\b", sanitized_lower)
+    ]
     if matches:
         return max(matches, key=len)
     return override or sanitized

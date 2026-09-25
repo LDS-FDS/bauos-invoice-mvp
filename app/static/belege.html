@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>BauOS – Belege</title>
-<link rel="stylesheet" href="/assets/style.css?v=7">
+<link rel="stylesheet" href="/assets/style.css?v=10">
 </head>
 <body>
 <div id="appNav"></div>
@@ -21,11 +21,13 @@
         <input type="date" id="summaryTo">
       </div>
     </div>
-    <div class="kpi-grid">
+    <div class="kpi-grid" style="grid-template-columns: repeat(6, 1fr);">
       <div class="kpi-tile"><div class="label">Ausgegeben</div><div class="value" id="summaryOut">–</div></div>
       <div class="kpi-tile"><div class="label">Eingegangen (Gutschriften)</div><div class="value" id="summaryIn">–</div></div>
       <div class="kpi-tile"><div class="label">Durch Skonto gespart</div><div class="value" id="summarySkontoSaved">–</div></div>
       <div class="kpi-tile"><div class="label">Verpasstes Skonto</div><div class="value" id="summarySkontoMissed">–</div></div>
+      <div class="kpi-tile"><div class="label">Ausstehend (offen)</div><div class="value" id="summaryOutstanding">–</div></div>
+      <div class="kpi-tile"><div class="label">Rechnungen gesamt</div><div class="value" id="summaryTotal">–</div></div>
     </div>
   </div>
 
@@ -166,7 +168,7 @@
   </div>
 </main>
 
-<script src="/assets/common.js?v=3"></script>
+<script src="/assets/common.js?v=5"></script>
 <script>
   renderNav("/belege");
 
@@ -223,10 +225,21 @@
       if (invoice.paid_with_skonto) skontoSaved += potentialSaving;
       else skontoMissed += potentialSaving;
     }
+
+    let outstanding = 0;
+    let totalAll = 0;
+    for (const invoice of allInvoices) {
+      if (invoice.status !== "storniert") totalAll += invoice.total_amount ?? 0;
+      if (invoice.status !== "offen" || invoice.is_gutschrift) continue;
+      outstanding += invoice.total_amount ?? 0;
+    }
+
     document.getElementById("summaryOut").textContent = formatEuro(out);
     document.getElementById("summaryIn").textContent = formatEuro(inc);
+    document.getElementById("summaryTotal").textContent = formatEuro(totalAll);
     document.getElementById("summarySkontoSaved").textContent = formatEuro(skontoSaved);
     document.getElementById("summarySkontoMissed").textContent = formatEuro(skontoMissed);
+    document.getElementById("summaryOutstanding").textContent = formatEuro(outstanding);
   }
 
   const today = new Date();
