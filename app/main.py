@@ -9,8 +9,10 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from app import (
+    articles_db,
     company_settings,
     customers_db,
+    dashboard,
     db,
     documents_db,
     employees_db,
@@ -33,6 +35,7 @@ projects_db.init_projects_table()
 documents_db.init_documents_tables()
 employees_db.init_employees_table()
 time_entries_db.init_time_entries_table()
+articles_db.init_articles_table()
 app.mount("/assets", StaticFiles(directory="app/static"), name="assets")
 
 
@@ -76,6 +79,14 @@ def baustellen_frontend() -> FileResponse:
     return FileResponse("app/static/baustellen.html")
 
 
+@app.get("/ausbauplan")
+def ausbauplan_frontend() -> FileResponse:
+    # Eigenständiges Angebots-/Rechnungs-Tool (Prototyp), läuft parallel zu
+    # den bestehenden Seiten - eigene Datenhaltung im Browser (localStorage),
+    # keine Anbindung an bauos.db/documents_db.py. Siehe app/static/ausbauplan.html.
+    return FileResponse("app/static/ausbauplan.html")
+
+
 def _extract_text_from_pdf(file_bytes: bytes) -> str:
     text_parts = []
     with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
@@ -97,6 +108,11 @@ def _render_first_page_as_png(file_bytes: bytes) -> bytes:
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok"}
+
+
+@app.get("/dashboard/summary")
+def get_dashboard_summary() -> dict:
+    return dashboard.build_dashboard_summary()
 
 
 def _build_response(data) -> dict:
@@ -587,3 +603,43 @@ def delete_project(project_id: int) -> dict:
     if not projects_db.delete_project(project_id):
         raise HTTPException(status_code=404, detail="Project not found")
     return {"deleted": project_id}
+
+
+class ArticleIn(BaseModel):
+    description: str
+    unit: str | None = None
+    unit_price: float = 0
+    tax_rate: float = 19.0
+
+
+@app.post("/articles")
+def create_article(article: ArticleIn) -> dict:
+    article_id = articles_db.create_article(article.model_dump())
+    return articles_db.get_article(article_id)
+
+
+@app.get("/articles")
+def list_articles() -> list[dict]:
+    return articles_db.list_articles()
+
+
+@app.get("/articles/{article_id}")
+def get_article(article_id: int) -> dict:
+    article = articles_db.get_article(article_id)
+    if article is None:
+        raise HTTPException(status_code=404, detail="Article not found")
+    return article
+
+
+@app.patch("/articles/{article_id}")
+def update_article(article_id: int, article: ArticleIn) -> dict:
+    if not articles_db.update_article(article_id, article.model_dump()):
+        raise HTTPException(status_code=404, detail="Article not found")
+    return articles_db.get_article(article_id)
+
+
+@app.delete("/articles/{article_id}")
+def delete_article(article_id: int) -> dict:
+    if not articles_db.delete_article(article_id):
+        raise HTTPException(status_code=404, detail="Article not found")
+    return {"deleted": article_id}
